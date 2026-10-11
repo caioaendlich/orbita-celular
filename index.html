@@ -695,7 +695,8 @@ function header(){
   s.innerHTML=g?`Retrato de <b>${fmtD(g)} · ${fmtH(g)}</b><br><span class="${age>6?'old':''}">${offline?'sem internet, retrato salvo':D.raw.demo?'dados fictícios':age>6?'Mac sem enviar há '+Math.floor(age)+' h':'sincronizado pelo Mac'}</span>`:'';
   $('#banner').innerHTML=D.raw.demo?'<div class="note" role="note">Demonstração com dados fictícios. Nenhum paciente real aparece aqui.</div>':'';
 }
-function render(raw){NOW=new Date();TODAY=startOf(NOW);D=build(raw);$('#tabs').hidden=false;header();const t=store.get('orbita_tab');go(VIEWS[t]?t:curTab)}
+let firstRender=true;
+function render(raw){NOW=new Date();TODAY=startOf(NOW);D=build(raw);$('#tabs').hidden=false;header();go(firstRender?'mapa':curTab);firstRender=false}
 async function fetchRemote(token,etag){
   const r=await fetch(`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28',...(etag?{'If-None-Match':etag}:{})},cache:'no-store'});
   if(r.status===304)return{same:true};
