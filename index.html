@@ -747,6 +747,7 @@ function showSetup(msg){
 async function boot(){
   if(DEMO){window.__orbitaDemo=demoSnapshot;render(demoSnapshot());return}
   if('serviceWorker' in navigator){try{navigator.serviceWorker.register('sw.js')}catch(e){}}
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
   const blob=await idb.get('blob'),pass=await idb.get('pass');const ck=await idb.get('checked');if(ck)lastCheck=new Date(ck);
   if(blob&&pass){try{render(await decryptSnapshot(blob,pass))}catch(e){showSetup(e.message);return}refresh(false);return}
   showSetup();
