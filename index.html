@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Órbita">
+<meta name="theme-color" content="#F3F5FA">
+<meta name="referrer" content="no-referrer">
+<title>Órbita Celular</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* App de uma tela: cabeçalho com a hora do retrato, conteúdo rolável, abas embaixo, ficha em folha que sobe. */
+:root{
+  --bg:#F3F5FA; --surface:#FFFFFF; --surface-2:#EAEEF6; --ink:#161B2E; --muted:#5D6680; --line:#DCE1EC;
+  --accent:#2D2F8F; --accent-soft:#E4E5F7; --star:#B8860B;
+  --gds:#2F6FED; --lq:#13936A; --ggl:#8B5CF6;
+  --ok:#13936A; --warn:#C27A00; --late:#C2412D;
+  --pearl-a:#FFFFFF; --pearl-b:#F4F6FA; --pearl-c:#DCE3EC; --gold-a:#FFFDF4; --gold-b:#F2D99A; --gold-c:#D3AE68; --gold-ink:#3A2A08;
+  --link:#8A97A9;
+  --shadow:0 1px 2px rgba(22,27,46,.06),0 6px 20px rgba(22,27,46,.06);
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Figtree",-apple-system,"Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --tabh:64px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1120; --surface:#171B2E; --surface-2:#20253B; --ink:#E9ECF6; --muted:#9AA3BF; --line:#2A3048;
+  --accent:#A9ABFF; --accent-soft:#272B52; --star:#E3B341;
+  --gds:#6E9BFF; --lq:#3CC795; --ggl:#B193FF; --ok:#3CC795; --warn:#F0A93B; --late:#F07A64;
+  --pearl-a:#3A4160; --pearl-b:#262C45; --pearl-c:#1B2036; --gold-a:#FFF3CF; --gold-b:#E2BD6A; --gold-c:#A97F2E; --gold-ink:#2A1E05;
+  --link:#59627E;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1120; --surface:#171B2E; --surface-2:#20253B; --ink:#E9ECF6; --muted:#9AA3BF; --line:#2A3048;
+  --accent:#A9ABFF; --accent-soft:#272B52; --star:#E3B341;
+  --gds:#6E9BFF; --lq:#3CC795; --ggl:#B193FF; --ok:#3CC795; --warn:#F0A93B; --late:#F07A64;
+  --pearl-a:#3A4160; --pearl-b:#262C45; --pearl-c:#1B2036; --gold-a:#FFF3CF; --gold-b:#E2BD6A; --gold-c:#A97F2E; --gold-ink:#2A1E05;
+  --link:#59627E;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.app{max-width:560px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;padding-inline:16px;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(var(--tabh) + 24px + env(safe-area-inset-bottom,0px))}
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding-block:12px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand i{width:18px;height:18px;border-radius:50%;border:2px solid var(--accent);position:relative;display:inline-block}
+.brand i::after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;background:var(--accent);top:-4px;right:-3px}
+.snap{font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+.snap b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.snap .old{color:var(--warn)}
+.note{background:var(--accent-soft);color:var(--accent);font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:10px;margin-bottom:12px}
+.note.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+h1{font-family:var(--f-display);font-weight:700;font-size:26px;line-height:1.15;margin:4px 0 2px;text-wrap:balance;letter-spacing:-.01em}
+h2{font-family:var(--f-display);font-weight:500;font-size:17px;margin:22px 0 10px;text-wrap:balance}
+.sub{color:var(--muted);font-size:13.5px}
+.row{display:flex;gap:10px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+.stat{background:var(--surface);border-radius:14px;padding:12px;box-shadow:var(--shadow);text-align:left}
+.stat .n{font-family:var(--f-display);font-weight:700;font-size:24px;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--muted)}
+.list{display:flex;flex-direction:column;gap:8px}
+.card{background:var(--surface);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);display:flex;gap:12px;align-items:center;text-align:left;width:100%}
+.card .t{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.card .m{font-size:12.5px;color:var(--muted)}
+.card .grow{flex:1;min-width:0}
+.card.off{opacity:.55}
+.card.off .t{text-decoration:line-through}
+.time{font-family:var(--f-mono);font-size:13px;width:46px;flex:none;font-variant-numeric:tabular-nums}
+.src{width:4px;align-self:stretch;border-radius:4px;flex:none}
+.pill{font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap;flex:none}
+.p-gds{color:var(--gds);background:color-mix(in srgb,var(--gds) 14%,transparent)}
+.p-lq{color:var(--lq);background:color-mix(in srgb,var(--lq) 14%,transparent)}
+.p-ggl{color:var(--ggl);background:color-mix(in srgb,var(--ggl) 14%,transparent)}
+.p-ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.p-warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.p-late{color:var(--late);background:color-mix(in srgb,var(--late) 14%,transparent)}
+.p-mute{color:var(--muted);background:var(--surface-2)}
+.stars{color:var(--star);letter-spacing:1px;font-size:12px;white-space:nowrap}
+.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:13px;flex:none;background:var(--surface-2);color:var(--ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:999px;font-size:13px;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--surface);border-color:var(--accent)}
+.search,.field{width:100%;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+.search{margin-bottom:10px}
+.days{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.days::-webkit-scrollbar{display:none}
+.day{flex:none;width:52px;padding:8px 0;border-radius:12px;background:var(--surface);text-align:center;box-shadow:var(--shadow)}
+.day .w{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.day .d{font-family:var(--f-display);font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+.day .dots{display:flex;gap:3px;justify-content:center;height:6px;margin-top:2px}
+.day .dots span{width:5px;height:5px;border-radius:50%}
+.day[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.day[aria-pressed="true"] .w{color:inherit;opacity:.8}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:8px 0 4px}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.empty{color:var(--muted);font-size:14px;padding:18px;text-align:center;background:var(--surface);border-radius:14px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);height:var(--tabh)}
+nav.tabs button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--muted)}
+nav.tabs button[aria-selected="true"]{color:var(--accent);font-weight:600}
+nav.tabs svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sheet-bg{position:fixed;inset:0;background:rgba(10,12,24,.35);z-index:20;opacity:0;transition:opacity .2s}
+.sheet-bg.on{opacity:1}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;max-width:560px;margin:0 auto;background:var(--bg);border-radius:20px 20px 0 0;max-height:90%;overflow-y:auto;overscroll-behavior:contain;padding:10px 16px calc(24px + env(safe-area-inset-bottom,0px));transform:translateY(100%);transition:transform .25s ease}
+.sheet.on{transform:none}
+.grab{width:40px;height:5px;border-radius:5px;background:var(--line);margin:4px auto 10px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;background:var(--surface);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 16px;border-radius:12px;font-weight:600;background:var(--accent);color:var(--surface);text-decoration:none}
+.btn.ghost{background:var(--surface);color:var(--accent);border:1px solid var(--line)}
+.btn[disabled]{opacity:.5}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.timeline{display:flex;flex-direction:column;background:var(--surface);border-radius:14px;padding:6px 14px;box-shadow:var(--shadow)}
+.timeline>div{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;align-items:baseline}
+.timeline>div:last-child{border-bottom:0}
+.timeline .dt{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);width:78px;flex:none}
+.money{font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{height:6px;border-radius:6px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.mapwrap{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:4px;margin-top:10px;overflow:hidden}
+.mapwrap svg{width:100%;height:auto;display:block;touch-action:manipulation}
+.mapwrap .gnode{cursor:pointer}
+.mapwrap .gnode:focus{outline:none}
+.mapwrap .gnode:focus-visible .disc{stroke-width:3}
+.crumb{font-size:13px;color:var(--muted);margin-top:10px;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.crumb button{color:var(--accent);font-weight:600}
+.pager{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:8px;font-size:13px;color:var(--muted)}
+.pager button{width:36px;height:36px;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);font-size:18px;color:var(--accent)}
+.chart svg{width:100%;height:auto;display:block}
+.toast{position:fixed;left:50%;bottom:calc(var(--tabh) + 18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;z-index:30;transition:all .2s;max-width:calc(100% - 32px);pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px;margin:6px 0 10px}
+.seg button{flex:1;padding:8px;border-radius:9px;font-size:13.5px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.setup{max-width:440px;margin:6vh auto 0;display:flex;flex-direction:column;gap:12px}
+.setup label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.setup .chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink)}
+.err{color:var(--late);font-size:13.5px;min-height:1.2em}
+details.more{margin-top:10px}
+details.more summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><i aria-hidden="true"></i>Órbita</div>
+    <div class="snap" id="snap"></div>
+  </header>
+  <div id="banner"></div>
+  <main id="view"></main>
+</div>
+
+<nav class="tabs" aria-label="Seções" id="tabs" hidden>
+  <div class="in" role="tablist">
+    <button role="tab" data-tab="hoje"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Hoje</button>
+    <button role="tab" data-tab="agenda"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Agenda</button>
+    <button role="tab" data-tab="mapa"><svg viewBox="0 0 24 24"><circle cx="12" cy="17" r="3.2"/><circle cx="5" cy="7" r="2.2"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="7" r="2.2"/><path d="M11 14 6 9M12 14V7.3M13 14l5-5"/></svg>Órbita</button>
+    <button role="tab" data-tab="pacientes"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.4.2 4 1.8 4.5 4.5"/></svg>Pacientes</button>
+    <button role="tab" data-tab="mais"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Mais</button>
+  </div>
+</nav>
+
+<div class="sheet-bg" id="sheetBg" hidden></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Ficha" hidden></section>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+/* =====================================================================
+   Configuração do retrato
+   ===================================================================== */
+const CFG={owner:'caioaendlich',repo:'orbita-dados',path:'retrato.bin'};
+const REAL_HOST=/github\.io$|^localhost$|^127\.0\.0\.1$/.test(location.hostname);
+const DEMO=!REAL_HOST||/[?&]demo\b/.test(location.search);
+
+/* =====================================================================
+   Utilidades
+   ===================================================================== */
+const $=s=>document.querySelector(s);
+const view=$('#view');
+const DAY=864e5;
+let NOW=new Date(), TODAY=startOf(NOW);
+function startOf(d){const x=new Date(d);x.setHours(0,0,0,0);return x}
+const addDays=(d,n)=>new Date(d.getTime()+n*DAY);
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+function parseDate(v){
+  if(!v)return null; if(v instanceof Date)return v;
+  const s=String(v);let m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+  if(m)return new Date(+m[1],+m[2]-1,+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  m=s.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if(m)return new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0));
+  const d=new Date(s);return isNaN(d)?null:d;
+}
+const fmtD=d=>d?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'—';
+const fmtDY=d=>d?d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+const fmtH=d=>d?d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+const brl=v=>v==null?'—':Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const daysSince=v=>{const d=parseDate(v);return d?Math.floor((TODAY-startOf(d))/DAY):null};
+function elapsedMonths(m){if(m==null)return 'Sem data';if(m<1)return 'Menos de 1 mês';if(m<12)return `${Math.floor(m)} ${Math.floor(m)===1?'mês':'meses'}`;const y=Math.floor(m/12),r=Math.floor(m%12);return `${y} ${y===1?'ano':'anos'}${r?' e '+r+(r===1?' mês':' meses'):''}`}
+const sinceLabel=d=>d==null?'sem data':elapsedMonths(d/30.4375);
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800)}
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const initials=n=>String(n||'?').trim().split(/\s+/).filter(Boolean).map(x=>x[0]).filter((_,i,a)=>i===0||i===a.length-1).join('').toUpperCase();
+const starsHTML=n=>n?'<span class="stars">'+'★'.repeat(n)+'<span style="opacity:.25">'+'★'.repeat(Math.max(0,5-n))+'</span></span>':'<span class="sub">sem estrelas</span>';
+const reduceMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* Famílias de procedimento e faixas de recência: mesma régua do Órbita do Mac */
+const PROC=[['Botox',/botox|toxina|dysport|xeomin/i,'#3FB8A0'],['Ultraformer',/ultraformer|ultrassom microfocado|hifu|mpt/i,'#8B74E8'],['Bioestimulador',/bioest|sculptra|radiesse|plla|elleva|rennova/i,'#D9962F'],['Preenchimento',/preench|fullface|labial|olheira|hialur/i,'#D8669A'],['Laser CO₂',/co[₂2]|neon|laser/i,'#3E95D6'],['Skinbooster',/skinboost/i,'#B5A23A'],['Outros',/.*/,'#8C97AB']];
+const procInfo=x=>PROC.find(p=>p[1].test(x||''));
+const family=x=>procInfo(x)[0];
+const RECENCY=['#2FAE7A','#86BC4F','#D2B12E','#E0843A','#D4515F'];
+const BANDS={Botox:[3,4,6,12,24],Ultraformer:[3,7,12,24],'Laser CO₂':[2,6,12,24],Preenchimento:[6,12,18,24],Bioestimulador:[3,6,12,24,36]};
+function procedureBand(date,name){
+  const d=daysSince(date);if(d==null)return{label:'Sem data confirmada',color:'#8191AA',rank:99};
+  const m=d/30.4375,points=BANDS[name]||[3,6,12,24];
+  let i=points.findIndex(x=>m<x);if(i<0)i=points.length-1;else if(i>0)i--;
+  const colors=points.length===5?RECENCY:[RECENCY[0],RECENCY[2],RECENCY[3],RECENCY[4]];
+  if(m<points[0])return{label:elapsedMonths(Math.floor(m)),color:colors[0],rank:m/100-1};
+  return{label:elapsedMonths(points[i])+(i===points.length-1?' ou mais':''),color:colors[i],rank:i};
+}
+function recPill(p){const d=daysSince(p.last_visit);if(d==null)return '<span class="pill p-mute">sem data</span>';const t=d<30?d+' d':d<365?Math.round(d/30.4)+' m':(d/365).toFixed(1).replace('.',',')+' a';const c=d<=90?'p-ok':d<=180?'p-warn':'p-late';return `<span class="pill ${c}" title="Desde a última consulta">${t}</span>`}
+
+/* =====================================================================
+   Armazenamento local (IndexedDB) para o retrato cifrado
+   ===================================================================== */
+const idb={
+  db:null,
+  open(){return this.db||(this.db=new Promise((res,rej)=>{try{const r=indexedDB.open('orbita-celular',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}}))},
+  async get(k){try{const db=await this.open();return await new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}catch(e){return undefined}},
+  async set(k,v){try{const db=await this.open();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}catch(e){}},
+  async clear(){try{const db=await this.open();await new Promise(res=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').clear();t.oncomplete=res;t.onerror=res})}catch(e){}}
+};
+
+/* =====================================================================
+   Cifra: ORB1 | iterações (uint32) | sal (16) | iv (12) | AES-256-GCM(gzip(json))
+   ===================================================================== */
+async function decryptSnapshot(buf,pass){
+  const b=new Uint8Array(buf);
+  if(b.length<40||String.fromCharCode(...b.slice(0,4))!=='ORB1')throw new Error('Arquivo de retrato em formato desconhecido.');
+  const iter=new DataView(b.buffer,b.byteOffset+4,4).getUint32(0);
+  const salt=b.slice(8,24),iv=b.slice(24,36),ct=b.slice(36);
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations:iter},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  let plain;
+  try{plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct)}catch(e){throw new Error('Senha incorreta ou arquivo alterado.')}
+  const stream=new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return JSON.parse(await new Response(stream).text());
+}
+
+/* =====================================================================
+   Dados fictícios no mesmo formato do retrato real
+   ===================================================================== */
+function demoSnapshot(){
+  let seed=20261011;
+  const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+  const pick=a=>a[Math.floor(rnd()*a.length)],between=(a,b)=>a+Math.floor(rnd()*(b-a+1));
+  const stamp=d=>iso(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':00';
+  const F=['Ana Clara','Beatriz','Camila','Daniela','Eduarda','Fernanda','Gabriela','Helena','Isabela','Juliana','Larissa','Mariana','Natália','Olívia','Patrícia','Renata','Sofia','Tatiane','Valéria','Yasmin','Luana','Priscila','Bruna','Carolina','Débora','Elisa','Flávia','Giovana'];
+  const M=['André','Bruno','Diego','Eduardo','Felipe','Gustavo','Henrique','Igor','João','Lucas','Marcelo','Nicolas','Otávio','Rafael','Thiago','Vinícius'];
+  const S=['Albuquerque','Barcellos','Coutinho','Damasceno','Esteves','Falcão','Guimarães','Hollanda','Iório','Junqueira','Lacerda','Moreira','Nogueira','Pacheco','Quintela','Rezende','Sampaio','Teixeira','Valadares','Xavier','Brandão','Castelo'];
+  const CITIES=[['Vitória',.6],['Rio de Janeiro',.2],['São Paulo',.18],[null,.02]];
+  const wpick=l=>{const r=rnd();let a=0;for(const[v,w]of l){a+=w;if(r<=a)return v}return l[0][0]};
+  const P=[['Botox full face',[900,1600],.35],['Ultraformer MPT face',[2400,4800],.38],['Bioestimulador Sculptra',[2200,3600],.45],['Preenchimento labial',[1400,2600],.4],['Laser CO₂ NEON',[2800,4200],.22],['Skinbooster',[900,1500],.4],['Peeling',[400,900],.2]];
+  const AGES=['18–29','30–39','40–49','50–59','60–69'];
+  const REL=['Particular','Particular','Particular','Modelo','Amigo','Familiar'];
+  const STG=['Ativo','Ativo','A reativar','Em acompanhamento','Em negociação','Aguardando resposta'];
+  const patients=[],events=[],plans=[],items=[],tasks=[],contacts=[];
+  const used=new Set();
+  for(let i=0;i<84;i++){
+    const fem=rnd()<.78;let name;do{name=(fem?pick(F):pick(M))+' '+pick(S)}while(used.has(name));used.add(name);
+    const city=wpick(CITIES),id='demo-'+i;
+    let d=addDays(TODAY,-between(15,1100));const n=between(1,6);const ev=[];
+    for(let k=0;k<n&&d<=TODAY;k++){const p=pick(P);const v=Math.round(between(p[1][0],p[1][1])/50)*50;const e={id:id+'-e'+k,patient_id:id,procedure:p[0],performed_on:iso(d),amount:rnd()<.9?v:null,cost:Math.round(v*p[2]),city:city||'Vitória',status:'realizado'};ev.push(e);events.push(e);d=addDays(d,between(25,220))}
+    const spend=ev.reduce((s,e)=>s+(e.amount||0),0);
+    const last=ev.length?ev[ev.length-1].performed_on:null;
+    const stars=rnd()<.08?null:Math.max(1,Math.min(5,Math.round(spend/4200)+between(0,1)));
+    const pat={id,name,city,phone:'(27) 9'+between(8000,9999)+'-'+String(between(0,9999)).padStart(4,'0'),stars,last_visit:last,last_visit_source:'Realização registrada',procedures:[...new Set(ev.map(e=>e.procedure))].join(', '),notes:pick(['Prefere manhã','Prefere fim de tarde','Responde melhor por áudio','Agenda pelo WhatsApp','Pede orçamento antes','','']),relationship:pick(REL),stage:pick(STG),sex:fem?'Feminino':'Masculino',age_band:pick(AGES),preferences:pick(['naturalidade','contato por mensagem','naturalidade, sem roxos','resultado rápido','']),known_spend:spend||null,next_contact:rnd()<.12?iso(addDays(TODAY,between(-5,20))):null,events:ev,contacts:[],upcoming:[]};
+    if(rnd()<.35){const c={id:id+'-c',patient_id:id,contacted_on:iso(addDays(TODAY,-between(1,90))),outcome:pick(['Respondeu, vai ver a agenda','Sem resposta','Pediu valores','Agendou retorno']),next_contact:null};contacts.push(c);pat.contacts.push(c);pat.last_contact=c.contacted_on}
+    if(rnd()<.45){
+      const fam=pick(['Laser CO₂ NEON','Ultraformer MPT face','Bioestimulador Sculptra','Botox full face','Skinbooster']);const sessions=between(2,4),done=between(0,sessions-1),interval=pick([1,2,3,4,6]);
+      const total=rnd()<.85?Math.round(between(2500,14000)/100)*100:null;const plan={id:id+'-pl',patient_id:id,patient_name:name,title:fam,status:pick(['ativo','ativo','proposto']),total,routine:[{procedure:fam,area:pick(['Face','Face e pescoço','Colo','Abdome']),sessions,interval,unit:'meses'}],next_date:null};
+      plans.push(plan);
+      const start=addDays(TODAY,-between(10,200));
+      for(let s=1;s<=sessions;s++){const when=addDays(start,(s-1)*interval*30);const it={id:plan.id+'-'+s,plan_id:plan.id,patient_id:id,procedure:fam,session:s,sessions,area:plan.routine[0].area,scheduled_on:iso(when),status:s<=done?'realizado':'previsto',plan_status:plan.status};items.push(it);if(it.status!=='realizado')pat.upcoming.push(it)}
+      pat.plan_potential=total;pat.potential_incomplete=total==null;
+    }
+    patients.push(pat);
+  }
+  for(let i=0;i<9;i++){const p=pick(patients);tasks.push({id:'t'+i,patient_id:p.id,patient_name:p.name,title:pick(['Enviar foto de 30 dias','Confirmar retorno','Mandar orçamento do plano','Revisar resultado','Pedir avaliação']),category:'acompanhamento',due_date:iso(addDays(TODAY,between(-6,12))),status:'aberta'})}
+  const gds=[],lq=[],ggl=[];
+  const G=['Plantão de pediatria','Gravação de conteúdo','Mentoria de CO₂','Reunião de parceria','Ônibus para SP','Estudo de artigos','Fechamento financeiro'];
+  for(let dd=-7;dd<=30;dd++){const day=addDays(TODAY,dd);if(day.getDay()===0)continue;const n=day.getDay()===6?between(0,2):between(2,6);const hs=new Set();
+    for(let k=0;k<n;k++){let h=between(8,18);while(hs.has(h))h=between(8,18);hs.add(h);const t=new Date(day);t.setHours(h,pick([0,0,30]));const r=rnd();
+      if(r<.18){ggl.push({id:'g'+dd+k,source:'google',paciente:pick(G),inicio:stamp(t),fim:stamp(new Date(t.getTime()+pick([60,120,240])*6e4)),status:'confirmado'})}
+      else{const p=pick(patients);const serv=p.upcoming.length&&rnd()<.4?p.upcoming[0].procedure:pick(['Consulta','Retorno',pick(P)[0]]);
+        if(r<.62)gds.push({hash:'h'+dd+k,paciente:p.name,celular:'',inicio:stamp(t),fim:stamp(new Date(t.getTime()+pick([30,45,60])*6e4)),medico:'Caio Endlich',servico:serv,confirmado:dd>=0&&rnd()<.6,cancelado:rnd()<.05,faltou:dd<0&&rnd()<.08,finalizado:dd<0});
+        else lq.push({id:'l'+dd+k,source:'datasigh',paciente:p.name,inicio:stamp(t),status:dd<0?'Atendido':pick(['Agendado','Confirmado']),servico:serv,medico:'Caio Endlich'})}}}
+  const campaigns=[];patients.slice(0,14).forEach((p,i)=>{const d=addDays(TODAY,between(-20,70));campaigns.push({id:'c'+i,title:'Aniversário de '+p.name.split(' ')[0],event_date:iso(d),annual:1,patient_name:p.name,notes:'Data pessoal cadastrada',status:'planejar'})});
+  const gen=new Date(NOW.getTime()-6*6e4);const g=gen.toISOString();
+  return{schema:1,gerado_em:g,demo:true,
+    operation:{patients,plans,plan_items:items,tasks,events,catalog:{},generated_at:g},
+    agenda:{gestaods:{itens:gds,atualizado_em:g},lequartier:{itens:lq,atualizado_em:g,erro:null},google:{itens:ggl,atualizado_em:g,erro:null,configurado:true}},
+    campaigns};
+}
+
+/* =====================================================================
+   Modelo interno
+   ===================================================================== */
+let D=null;   // dados prontos para as telas
+function build(raw){
+  const op=raw.operation||{};
+  const patients=(op.patients||[]).map(p=>({...p,events:p.events||[],contacts:p.contacts||[],upcoming:p.upcoming||[]}));
+  const byId=new Map(patients.map(p=>[p.id,p]));
+  const byName=new Map();patients.forEach(p=>{const k=norm(p.name);if(!byName.has(k))byName.set(k,[]);byName.get(k).push(p)});
+  const match=name=>{const l=byName.get(norm(name));return l&&l.length===1?l[0]:null};
+  const ag=raw.agenda||{};
+  const agenda=[];
+  for(const a of (ag.gestaods?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=a.cancelado?'cancelado':a.faltou?'faltou':a.finalizado?'finalizado':a.confirmado?'confirmado':'agendado';agenda.push({src:'gds',ini,fim:parseDate(a.fim),title:a.paciente,service:a.servico,status:st,off:!!a.cancelado,p:match(a.paciente)})}
+  for(const a of (ag.lequartier?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=String(a.status||'');agenda.push({src:'lq',ini,title:a.paciente,service:a.servico,status:st.toLowerCase(),off:/cancel/i.test(st),p:match(a.paciente)})}
+  for(const a of (ag.google?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;agenda.push({src:'ggl',ini,fim:parseDate(a.fim),title:a.paciente,service:a.local||'',status:a.status||'',off:a.status==='cancelado',allDay:/ 00:00:00$/.test(a.inicio)&&/ 23:59:59$/.test(a.fim||''),p:null})}
+  agenda.sort((a,b)=>a.ini-b.ini);
+  const events=op.events||patients.flatMap(p=>p.events);
+  const items=(op.plan_items||[]);
+  const cities=[...new Set(patients.map(p=>p.city).filter(c=>c&&c!=='A classificar'))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const metric=patients.some(p=>p.events.some(e=>e.amount!=null))?'amount':'stars';
+  return{raw,patients,byId,match,agenda,events,plans:op.plans||[],items,tasks:op.tasks||[],campaigns:raw.campaigns||[],cities,metric,generated:parseDate(raw.gerado_em)};
+}
+const openItem=i=>!['realizado','cancelado'].includes(i.status)&&!['recusado','cancelado','concluido'].includes(i.plan_status);
+const openTask=t=>!['concluida','cancelada'].includes(t.status);
+const FONTE={gds:'GestãoDS',lq:'Le Quartier',ggl:'Google'};
+
+/* =====================================================================
+   Cartões e ficha
+   ===================================================================== */
+function evCard(e,showDay){
+  const who=e.p?e.p.name:e.title;const det=[e.service,e.status].filter(Boolean).join(' · ');
+  return `<button class="card${e.off?' off':''}" ${e.p?`data-pac="${esc(e.p.id)}"`:''}>
+    <span class="src" style="background:var(--${e.src})"></span>
+    <span class="time">${showDay?fmtD(e.ini)+'<br>':''}${e.allDay?'dia':fmtH(e.ini)}</span>
+    <span class="grow"><span class="t">${esc(who)}</span><span class="m">${esc(det||FONTE[e.src])}</span></span>
+    <span class="pill p-${e.src}">${FONTE[e.src].split(' ')[0]}</span></button>`;
+}
+function patCard(p,extra){
+  return `<button class="card" data-pac="${esc(p.id)}"><span class="avatar">${esc(initials(p.name))}</span><span class="grow"><span class="t">${esc(p.name)}</span><span class="m">${extra??esc([p.city&&p.city!=='A classificar'?p.city:'Praça a classificar',p.stage].filter(Boolean).join(' · '))}</span><br>${starsHTML(p.stars)}</span>${recPill(p)}</button>`;
+}
+function bindCards(root){root.querySelectorAll('[data-pac]').forEach(b=>b.addEventListener('click',()=>openPatient(b.dataset.pac)))}
+function waLink(phone){const d=String(phone||'').replace(/\D/g,'');if(d.length<10)return null;return 'https://wa.me/'+(d.length<=11?'55'+d:d)}
+function openPatient(id){
+  const p=D.byId.get(id);if(!p)return;
+  const sheet=$('#sheet'),bg=$('#sheetBg');
+  const next=D.agenda.filter(e=>e.p===p&&e.ini>=NOW&&!e.off);
+  const up=(p.upcoming||[]).slice().sort((a,b)=>(a.scheduled_on||'9999').localeCompare(b.scheduled_on||'9999'));
+  const ev=[...p.events].sort((a,b)=>(b.performed_on||'').localeCompare(a.performed_on||''));
+  const wa=waLink(p.phone);
+  const kv=[['Telefone',esc(p.phone||'Não informado')],['Estrelas',starsHTML(p.stars)],['Última consulta',`${fmtDY(parseDate(p.last_visit))} ${recPill(p)}${p.last_visit_source?'<br><span class="sub">'+esc(p.last_visit_source)+'</span>':''}`],['Último contato',p.last_contact?fmtDY(parseDate(p.last_contact))+' · '+sinceLabel(daysSince(p.last_contact)):'Não registrado'],p.next_contact?['Retomar em',fmtDY(parseDate(p.next_contact))]:null,['Gasto conhecido',`<span class="money">${brl(p.known_spend)}</span>`],['Potencial do plano',`<span class="money">${brl(p.plan_potential)}</span>${p.potential_incomplete?' <span class="sub">incompleto</span>':''}`],p.relationship?['Categoria',esc(p.relationship)]:null,p.stage?['Estágio',esc(p.stage)]:null,(p.sex||p.age_band)?['Perfil',esc([p.sex,p.age_band].filter(Boolean).join(' · '))]:null,p.preferences?['Preferências',esc(p.preferences)]:null,p.notes?['Observação',esc(p.notes)]:null].filter(Boolean);
+  sheet.innerHTML=`<div class="grab"></div>
+    <div class="row"><span class="avatar" style="width:48px;height:48px;font-size:16px">${esc(initials(p.name))}</span><div style="min-width:0"><h1 style="font-size:22px;margin:0">${esc(p.name)}</h1><div class="sub">${esc(p.city&&p.city!=='A classificar'?p.city:'Praça a classificar')}</div></div></div>
+    <div class="btns">${wa?`<a class="btn" id="wa" href="${D.raw.demo?'#':wa}" ${D.raw.demo?'':'target="_blank" rel="noopener noreferrer"'}>WhatsApp</a>`:''}${p.phone?'<button class="btn ghost" id="cp">Copiar telefone</button>':''}</div>
+    <h2>Resumo</h2><dl class="kv">${kv.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    ${up.length?`<h2>Plano: próximas sessões</h2><div class="timeline">${up.map(i=>`<div><span class="dt">${i.scheduled_on?fmtDY(parseDate(i.scheduled_on)):'sem data'}</span><span style="flex:1;min-width:0">${esc(i.procedure)}${i.session?' · '+i.session+'/'+i.sessions:''}${i.area?'<br><span class="sub">'+esc(i.area)+'</span>':''}</span>${i.scheduled_on&&parseDate(i.scheduled_on)<TODAY?'<span class="pill p-late">atrasada</span>':''}</div>`).join('')}</div>`:''}
+    ${next.length?`<h2>Próximos horários</h2><div class="list">${next.map(e=>evCard(e,true)).join('')}</div>`:''}
+    <h2>Procedimentos registrados</h2>
+    ${ev.length?`<div class="timeline">${ev.map(x=>`<div><span class="dt">${fmtDY(parseDate(x.performed_on))}</span><span style="flex:1;min-width:0">${esc(x.procedure)}</span><span class="money">${brl(x.amount)}</span></div>`).join('')}</div>`:`<div class="empty">Sem realização datada. Histórico do cadastro: ${esc(p.procedures||'não informado')}</div>`}
+    ${p.contacts.length?`<h2>Contatos</h2><div class="timeline">${p.contacts.map(c=>`<div><span class="dt">${fmtDY(parseDate(c.contacted_on))}</span><span style="flex:1">${esc(c.outcome)}</span></div>`).join('')}</div>`:''}
+    <p class="sub" style="margin-top:12px">Prontuário continua no GestãoDS e não entra no retrato.</p>
+    <div class="btns"><button class="btn ghost" id="fechar">Fechar</button></div>`;
+  bg.hidden=false;sheet.hidden=false;requestAnimationFrame(()=>{bg.classList.add('on');sheet.classList.add('on')});sheet.scrollTop=0;
+  const close=()=>{bg.classList.remove('on');sheet.classList.remove('on');setTimeout(()=>{bg.hidden=true;sheet.hidden=true},250)};
+  bg.onclick=close;$('#fechar').onclick=close;
+  const w=$('#wa');if(w&&D.raw.demo)w.onclick=e=>{e.preventDefault();toast('Nos dados reais, abre a conversa no WhatsApp. O envio continua sendo seu.')};
+  const c=$('#cp');if(c)c.onclick=()=>{try{navigator.clipboard.writeText(p.phone).then(()=>toast('Telefone copiado'),()=>toast(p.phone))}catch(e){toast(p.phone)}};
+  bindCards(sheet);
+}
+
+/* =====================================================================
+   Hoje
+   ===================================================================== */
+function vHoje(){
+  const today=D.agenda.filter(e=>e.ini>=TODAY&&e.ini<addDays(TODAY,1)&&!e.off);
+  const rest=today.filter(e=>e.ini>=NOW||e.allDay);
+  const week=D.agenda.filter(e=>e.ini>=TODAY&&e.ini<addDays(TODAY,7)&&!e.off&&e.src!=='ggl').length;
+  const late=D.items.filter(i=>openItem(i)&&i.scheduled_on&&parseDate(i.scheduled_on)<TODAY).sort((a,b)=>a.scheduled_on.localeCompare(b.scheduled_on));
+  const tasks=D.tasks.filter(t=>openTask(t)&&t.due_date&&parseDate(t.due_date)<=addDays(TODAY,2)).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+  const retake=D.patients.filter(p=>p.next_contact&&parseDate(p.next_contact)<=TODAY);
+  const react=D.patients.filter(p=>(p.stars||0)>=4&&(daysSince(p.last_visit)??0)>150&&p.stage!=='Pausado').sort((a,b)=>b.stars-a.stars||(daysSince(b.last_visit)-daysSince(a.last_visit)));
+  const dates=D.campaigns.filter(c=>{const d=nextOccurrence(c);return d&&d>=TODAY&&d<=addDays(TODAY,7)});
+  const h=NOW.getHours(),hi=h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+  const name=p=>p?p.name:'';
+  view.innerHTML=`<h1>${hi}, Caio</h1>
+    <div class="sub">${TODAY.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</div>
+    <div class="stats">
+      <button class="stat" data-go="agenda"><div class="n">${today.filter(e=>e.src!=='ggl').length}</div><div class="l">atendimentos hoje</div></button>
+      <button class="stat" data-go="agenda"><div class="n">${week}</div><div class="l">nos próximos 7 dias</div></button>
+      <button class="stat" data-more="pendencias"><div class="n">${late.length}</div><div class="l">sessões de plano atrasadas</div></button>
+    </div>
+    <h2>${rest.length?'Ainda hoje':'Hoje'}</h2>
+    <div class="list">${(rest.length?rest:today).map(e=>evCard(e)).join('')||'<div class="empty">Sem compromissos hoje.</div>'}</div>
+    <h2>Precisa de atenção</h2>
+    <div class="list">
+      ${tasks.slice(0,4).map(t=>{const p=D.byId.get(t.patient_id);return `<button class="card" ${p?`data-pac="${esc(p.id)}"`:''}><span class="avatar">${esc(initials(t.patient_name||'·'))}</span><span class="grow"><span class="t">${esc(t.title)}</span><span class="m">${esc(t.patient_name||'Sem paciente')} · ${fmtD(parseDate(t.due_date))}</span></span><span class="pill ${parseDate(t.due_date)<TODAY?'p-late':'p-warn'}">pendência</span></button>`}).join('')}
+      ${late.slice(0,4).map(i=>{const p=D.byId.get(i.patient_id);return p?`<button class="card" data-pac="${esc(p.id)}"><span class="avatar">${esc(initials(p.name))}</span><span class="grow"><span class="t">${esc(p.name)}</span><span class="m">${esc(i.procedure)}${i.session?' · sessão '+i.session+' de '+i.sessions:''} prevista para ${fmtD(parseDate(i.scheduled_on))}</span></span><span class="pill p-late">plano</span></button>`:''}).join('')}
+      ${retake.slice(0,3).map(p=>patCard(p,'Retomar contato combinado para '+fmtD(parseDate(p.next_contact)))).join('')}
+      ${react.slice(0,3).map(p=>patCard(p,'Sem consulta há '+sinceLabel(daysSince(p.last_visit)))).join('')}
+      ${dates.slice(0,3).map(c=>{const p=D.match(c.patient_name);return `<button class="card" ${p?`data-pac="${esc(p.id)}"`:''}><span class="time">${fmtD(nextOccurrence(c))}</span><span class="grow"><span class="t">${esc(c.title)}</span><span class="m">${esc(c.patient_name||'Campanha')}</span></span><span class="pill p-ok">data</span></button>`}).join('')}
+      ${!(tasks.length+late.length+retake.length+react.length+dates.length)?'<div class="empty">Nada pendente pelos critérios do retrato.</div>':''}
+    </div>`;
+  view.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  view.querySelectorAll('[data-more]').forEach(b=>b.onclick=()=>{maisSec=b.dataset.more;go('mais')});
+  bindCards(view);
+}
+function nextOccurrence(c){const d=parseDate(c.event_date);if(!d)return null;if(!c.annual)return d;let x=new Date(TODAY.getFullYear(),d.getMonth(),d.getDate());if(x<TODAY)x=new Date(TODAY.getFullYear()+1,d.getMonth(),d.getDate());return x}
+
+/* =====================================================================
+   Agenda
+   ===================================================================== */
+let agDay=0,agMode='dia',agSrc={gds:true,lq:true,ggl:true};
+function vAgenda(){
+  const first=D.agenda.length?Math.min(-7,Math.floor((startOf(D.agenda[0].ini)-TODAY)/DAY)):-7;
+  const last=D.agenda.length?Math.max(30,Math.floor((startOf(D.agenda[D.agenda.length-1].ini)-TODAY)/DAY)):30;
+  const from=Math.max(first,-60),to=Math.min(last,120);
+  const w=['dom','seg','ter','qua','qui','sex','sáb'];
+  const sel=addDays(TODAY,agDay);
+  const vis=D.agenda.filter(e=>agSrc[e.src]);
+  const list=agMode==='dia'?vis.filter(e=>e.ini>=sel&&e.ini<addDays(sel,1)):vis.filter(e=>e.ini>=TODAY&&!e.off);
+  const days=[];for(let d=from;d<=to;d++)days.push(d);
+  view.innerHTML=`<h1>Agenda</h1>
+    <div class="seg" role="group" aria-label="Período"><button data-mode="dia" aria-pressed="${agMode==='dia'}">Por dia</button><button data-mode="lista" aria-pressed="${agMode==='lista'}">Daqui para frente</button></div>
+    ${agMode==='dia'?`<div class="days">${days.map(d=>{const dt=addDays(TODAY,d);const fs=[...new Set(vis.filter(e=>e.ini>=dt&&e.ini<addDays(dt,1)&&!e.off).map(e=>e.src))];
+      return `<button class="day" data-d="${d}" aria-pressed="${d===agDay}"><div class="w">${d===0?'hoje':w[dt.getDay()]}</div><div class="d">${dt.getDate()}</div><div class="dots">${fs.map(f=>`<span style="background:var(--${f})"></span>`).join('')}</div></button>`}).join('')}</div>`:''}
+    <div class="chips" style="margin-top:8px">${Object.entries(FONTE).map(([k,l])=>`<button class="chip" data-src="${k}" aria-pressed="${agSrc[k]}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--${k});margin-right:6px"></span>${l}</button>`).join('')}</div>
+    <div class="sub" style="margin:8px 0 10px">${agMode==='dia'?sel.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})+' · '+list.filter(e=>!e.off).length+' compromissos':list.length+' compromissos a partir de hoje'}</div>
+    <div class="list">${list.map(e=>evCard(e,agMode!=='dia')).join('')||'<div class="empty">Nada neste dia.</div>'}</div>
+    <p class="sub" style="margin-top:14px">Criar, confirmar e remarcar continuam no Mac. Aqui é consulta do último retrato.</p>`;
+  view.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{agMode=b.dataset.mode;vAgenda()});
+  view.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{agDay=+b.dataset.d;vAgenda()});
+  view.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{agSrc[b.dataset.src]=!agSrc[b.dataset.src];vAgenda()});
+  const cur=view.querySelector('.day[aria-pressed="true"]');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
+  bindCards(view);
+}
+
+/* =====================================================================
+   Pacientes
+   ===================================================================== */
+let pq='',pCity='Todas',pOrd='return',pSubset=null;
+const SORTS=[['return','Consulta mais antiga'],['recent','Consulta mais recente'],['stars','Estrelas'],['spent','Maior gasto'],['potential','Maior potencial'],['contact','Contato mais antigo'],['name','A a Z']];
+function sortPatients(l,ord){
+  const dv=(p,k)=>{const d=parseDate(p[k]);return d?d.getTime():null};
+  const last=(a,b,fa,fb)=>fa==null&&fb==null?0:fa==null?1:fb==null?-1:null;
+  const by={return:(a,b)=>{const x=dv(a,'last_visit'),y=dv(b,'last_visit');return last(a,b,x,y)??x-y},recent:(a,b)=>{const x=dv(a,'last_visit'),y=dv(b,'last_visit');return last(a,b,x,y)??y-x},stars:(a,b)=>(b.stars||0)-(a.stars||0)||(b.known_spend||0)-(a.known_spend||0),spent:(a,b)=>(b.known_spend??-1)-(a.known_spend??-1),potential:(a,b)=>(b.plan_potential??-1)-(a.plan_potential??-1),contact:(a,b)=>{const x=dv(a,'last_contact'),y=dv(b,'last_contact');return last(a,b,x,y)??x-y},name:(a,b)=>a.name.localeCompare(b.name,'pt-BR')}[ord];
+  return l.sort((a,b)=>by(a,b)||a.name.localeCompare(b.name,'pt-BR'));
+}
+function vPacientes(){
+  const cities=['Todas',...D.cities];
+  view.innerHTML=`<h1>Pacientes</h1><div class="sub">${D.patients.length} no retrato</div>
+    ${pSubset?`<div class="note" style="margin-top:10px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>Segmento do mapa: ${esc(pSubset.label)} · ${pSubset.ids.length}</span><button id="clr" style="color:inherit;text-decoration:underline">limpar</button></div>`:''}
+    <input class="search" id="q" type="search" placeholder="Buscar por nome, procedimento ou nota" value="${esc(pq)}" aria-label="Buscar paciente" style="margin-top:12px" autocomplete="off">
+    <div class="chips">${cities.map(c=>`<button class="chip" data-city="${esc(c)}" aria-pressed="${c===pCity}">${esc(c)}</button>`).join('')}</div>
+    <div class="chips" style="margin-top:6px">${SORTS.map(([v,l])=>`<button class="chip" data-ord="${v}" aria-pressed="${v===pOrd}">${l}</button>`).join('')}</div>
+    <div class="sub" id="pcount" style="margin-top:10px"></div>
+    <div class="list" id="plist" style="margin-top:8px"></div>`;
+  const draw=()=>{
+    const q=norm(pq);const ids=pSubset?new Set(pSubset.ids):null;
+    let l=D.patients.filter(p=>(!ids||ids.has(p.id))&&(pCity==='Todas'||p.city===pCity)&&(!q||norm(p.name).includes(q)||norm(p.procedures).includes(q)||norm(p.notes).includes(q)||p.events.some(e=>norm(e.procedure).includes(q))));
+    sortPatients(l,pOrd);
+    $('#pcount').textContent=l.length+' pacientes';
+    const show=l.slice(0,200);
+    $('#plist').innerHTML=show.map(p=>patCard(p)).join('')+(l.length>200?`<div class="empty">Mostrando 200 de ${l.length}. Refine a busca.</div>`:'')||'<div class="empty">Ninguém com esse filtro.</div>';
+    bindCards($('#plist'));
+  };
+  $('#q').addEventListener('input',e=>{pq=e.target.value;draw()});
+  view.querySelectorAll('[data-city]').forEach(b=>b.onclick=()=>{pCity=b.dataset.city;vPacientes()});
+  view.querySelectorAll('[data-ord]').forEach(b=>b.onclick=()=>{pOrd=b.dataset.ord;vPacientes()});
+  const c=$('#clr');if(c)c.onclick=()=>{pSubset=null;vPacientes()};
+  draw();
+}
+
+/* =====================================================================
+   Órbita: mapa mental (mesma lógica do Órbita do Mac)
+   ===================================================================== */
+const LENSES=[['operation','Operação'],['recency','Recência'],['procedures','Procedimentos'],['stars','Estrelas'],['sex','Sexo'],['age','Faixa etária'],['city','Praças']];
+let gLens='operation',gPath=[],gPage=0,gPrev=new Map(),gScene='',gShown=[],gList=null;
+const eventsFor=(p,fam)=>p.events.filter(e=>!fam||family(e.procedure)===fam);
+function groupsFor(mode,rows){
+  const map=new Map();const add=(label,p,extra)=>{if(!map.has(label))map.set(label,{label,rows:[],...extra});map.get(label).rows.push(p)};
+  if(mode==='recency'){for(const p of rows){const b=procedureBand(p.last_visit,'Botox');add(b.label,p,b)}return [...map.values()].sort((a,b)=>a.rank-b.rank)}
+  if(mode==='procedures'){for(const p of rows){const names=new Set([...p.events.map(e=>family(e.procedure)),...PROC.slice(0,-1).filter(x=>x[1].test(p.procedures||'')).map(x=>x[0])]);for(const l of names.size?names:['Não informado'])add(l,p,{family:l,nextMode:'procedureCount',color:(PROC.find(x=>x[0]===l)||[])[2]})}return [...map.values()].sort((a,b)=>b.rows.length-a.rows.length)}
+  const key={stars:'stars',sex:'sex',age:'age_band',city:'city'}[mode];
+  for(const p of rows){let v=p[key];if(key==='stars')v=v?v+(v===1?' estrela':' estrelas'):'Não informado';else if(!v||v==='A classificar')v='Não informado';add(v,p)}
+  const out=[...map.values()];
+  if(key==='stars')return out.sort((a,b)=>(parseInt(b.label)||0)-(parseInt(a.label)||0));
+  if(key==='age_band')return out.sort((a,b)=>a.label.localeCompare(b.label,'pt-BR',{numeric:true}));
+  return out.sort((a,b)=>b.rows.length-a.rows.length);
+}
+function procedureGroups(rows,fam,kind){
+  const map=new Map();
+  for(const p of rows){const ev=eventsFor(p,fam);let key,color,rank;
+    if(kind==='count'){key=ev.length?`${ev.length} realiza${ev.length===1?'ção':'ções'}`:'Quantidade não confirmada';rank=ev.length||999}
+    else{const b=procedureBand(ev.map(e=>e.performed_on).sort().at(-1),fam);key=b.label;color=b.color;rank=b.rank}
+    if(!map.has(key))map.set(key,{label:key,rows:[],color,rank,family:fam,nextMode:kind==='count'?'procedureRecency':'patients'});map.get(key).rows.push(p)}
+  return [...map.values()].sort((a,b)=>a.rank-b.rank);
+}
+function financialGroups(rows){
+  const key=rows.some(p=>p.plan_potential!=null)?'plan_potential':rows.some(p=>p.known_spend!=null)?'known_spend':'stars';
+  const sort={plan_potential:'potential',known_spend:'spent',stars:'stars'}[key];
+  const ordered=[...rows].sort((a,b)=>(b[key]??-1)-(a[key]??-1)||a.name.localeCompare(b.name,'pt-BR'));
+  const size=Math.max(1,Math.ceil(ordered.length/6)),groups=[];
+  for(let i=0;i<ordered.length;i+=size){const part=ordered.slice(i,i+size);groups.push({label:part.length===1?part[0].name:'Grupo '+(groups.length+1),rows:part,financial:true,sort,weight:part.reduce((s,p)=>s+Math.max(0,p[key]||0),0)})}
+  return groups.map((g,i)=>({...g,color:`hsl(${135-(groups.length>1?i/(groups.length-1):0)*130} 52% 48%)`}));
+}
+function rootGroups(all){
+  return [
+    {label:'Pacientes',rows:all,nextMode:'recency'},
+    {label:'Agenda',rows:[],view:'agenda',count:D.agenda.filter(e=>!e.off&&e.ini>=NOW&&e.src!=='ggl').length},
+    {label:'Pendências',rows:[],more:'pendencias',count:D.tasks.filter(openTask).length+D.items.filter(i=>openItem(i)&&i.scheduled_on&&parseDate(i.scheduled_on)<TODAY).length},
+    {label:'Planos',rows:[],more:'planos',count:D.plans.filter(p=>!['concluido','recusado','cancelado'].includes(p.status)).length},
+    {label:'Campanhas',rows:[],more:'campanhas',count:D.campaigns.filter(c=>{const d=nextOccurrence(c);return d&&d<=addDays(TODAY,60)}).length}
+  ];
+}
+function nodeWeight(g){
+  if(g.financial)return g.weight;
+  if(D.metric==='amount')return g.rows.reduce((s,p)=>s+eventsFor(p,g.family).reduce((n,e)=>n+(e.amount??0),0),0);
+  return g.rows.reduce((s,p)=>s+(p.stars||0),0);
+}
+function wrapLabel(label,max){const words=String(label).split(' '),lines=[''];for(const w of words){if((lines.at(-1)+' '+w).trim().length>max&&lines.at(-1))lines.push(w);else lines[lines.length-1]=(lines.at(-1)+' '+w).trim()}return lines.length>2?[lines[0],lines[1].slice(0,max-1)+'…']:lines}
+function shortName(n){const p=String(n).trim().split(/\s+/);return p.length>1?[p[0],p.at(-1)]:p}
+function vMapa(){
+  const all=D.patients;
+  for(const step of gPath)step.rows=step.rows.map(x=>D.byId.get(x.id)).filter(Boolean);
+  const current=gPath.at(-1),rows=current?.rows||all,mode=current?.nextMode||gLens;
+  let groups=gLens==='operation'&&!current?rootGroups(all):mode==='procedureCount'?procedureGroups(rows,current.family,'count'):mode==='procedureRecency'?procedureGroups(rows,current.family,'recency'):mode==='patients'?financialGroups(rows):groupsFor(mode,rows);
+  const pageSize=6,total=groups.length,pages=Math.max(1,Math.ceil(total/pageSize));gPage=Math.min(gPage,pages-1);
+  groups=groups.slice(gPage*pageSize,(gPage+1)*pageSize);gShown=groups;
+  const n=groups.length,coreR=current?42:50;
+  // leque acima do núcleo, como no Mac; no celular até 6 discos por página para caber o texto
+  const cap=n>5?31:n>4?34:n>3?37:n>1?40:44, R=n>5?140:n>4?140:n>3?138:n>1?136:128, span=n>5?166:n>4?160:n>3?150:n>1?120:0;
+  const W=360,cx=180,cy=Math.round(R+cap+22);
+  const ancestors=current?[{label:'Órbita',rows:all,idx:0},...gPath.slice(0,-1).map((s,i)=>({label:s.label,rows:s.rows,idx:i+1}))].slice(-2):[];
+  const H=cy+coreR+(ancestors.length===2?108:ancestors.length?66:22);
+  const weights=groups.map(nodeWeight),wmin=Math.min(...weights),wmax=Math.max(...weights);
+  const radii=weights.map(w=>!wmax||wmax===wmin?cap*.9:cap*(.74+.26*(w-wmin)/(wmax-wmin)));
+  const pos=groups.map((g,i)=>{const a=(-90+(n>1?(i/(n-1)-.5)*span:0))*Math.PI/180;return{a,x:cx+Math.cos(a)*R,y:cy+Math.sin(a)*R,r:radii[i]}});
+  const scene=gLens+':'+gPath.map(x=>x.label).join('/')+':'+gPage,changed=scene!==gScene;
+  const key=g=>g.label;
+  let svg=`<defs>
+    <radialGradient id="pearl" cx="30%" cy="22%" r="85%"><stop offset="0" stop-color="var(--pearl-a)"/><stop offset=".62" stop-color="var(--pearl-b)"/><stop offset="1" stop-color="var(--pearl-c)"/></radialGradient>
+    <radialGradient id="gold" cx="32%" cy="24%" r="85%"><stop offset="0" stop-color="var(--gold-a)"/><stop offset=".6" stop-color="var(--gold-b)"/><stop offset="1" stop-color="var(--gold-c)"/></radialGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="#1c2840" flood-opacity=".16"/></filter></defs>`;
+  // ligações: do núcleo ao disco, com leve curvatura
+  pos.forEach((p,i)=>{const c=groups[i].color||'var(--link)';const sx=cx+Math.cos(p.a)*(coreR+2),sy=cy+Math.sin(p.a)*(coreR+2),ex=p.x-Math.cos(p.a)*(p.r+2),ey=p.y-Math.sin(p.a)*(p.r+2);const mx=(sx+ex)/2-Math.sin(p.a)*10,my=(sy+ey)/2+Math.cos(p.a)*10;
+    svg+=`<path class="glink" d="M${sx.toFixed(1)} ${sy.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="${c}" stroke-opacity=".5" stroke-width="1.5"/>`});
+  // ancestrais recuam abaixo do núcleo
+  const anc=[];
+  ancestors.forEach((a,i)=>{const dist=ancestors.length-i;const y=dist===1?cy+coreR+38:cy+coreR+86,r=dist===1?22:15;anc.push({a,y,r,dist});svg+=`<path d="M${cx} ${dist===1?cy+coreR:cy+coreR+60} L${cx} ${y-r}" stroke="var(--link)" stroke-opacity="${dist===1?.6:.35}" fill="none"/>`});
+  anc.forEach(({a,y,r,dist})=>{svg+=`<g class="gnode" data-anc="${a.idx}" data-key="${esc(a.label)}" role="button" tabindex="0" aria-label="Voltar para ${esc(a.label)}" opacity="${dist===1?.62:.34}"><circle class="disc" cx="${cx}" cy="${y}" r="${r}" fill="url(#pearl)" stroke="var(--link)" stroke-width="1.2"/><text x="${cx}" y="${y}" text-anchor="middle" dominant-baseline="central" font-family="var(--f-display)" font-weight="700" font-size="${dist===1?12:9.5}" fill="var(--ink)">${a.rows.length}</text><text x="${cx+r+7}" y="${y}" dominant-baseline="central" font-size="${dist===1?12:10}" fill="var(--muted)">${esc(a.label.length>24?a.label.slice(0,23)+'…':a.label)}</text></g>`});
+  // discos filhos
+  groups.forEach((g,i)=>{const p=pos[i],c=g.color||'var(--link)',single=g.financial&&g.rows.length===1;const val=g.count??g.rows.length;
+    let inner;
+    if(single){const ln=shortName(g.rows[0].name).map(l=>l.length>12?l.slice(0,11)+'…':l);const fs=Math.min(11,p.r*.36,(p.r*1.7)/(Math.max(...ln.map(l=>l.length))*.56));inner=ln.map((l,j)=>`<text x="${p.x}" y="${p.y+(j-(ln.length-1)/2)*fs*1.2}" text-anchor="middle" dominant-baseline="central" font-size="${fs}" font-weight="600" fill="var(--ink)">${esc(l.length>12?l.slice(0,11)+'…':l)}</text>`).join('')}
+    else{const fs=Math.max(8.6,Math.min(10.5,p.r*.29));const maxc=Math.floor(p.r*1.7/(fs*.52));const ln=wrapLabel(g.label,maxc);const longest=Math.max(...ln.map(l=>l.length));const fsFit=Math.min(fs,(p.r*1.72)/(longest*.63));const numSize=Math.min(p.r*.6,20,(p.r*1.45)/Math.max(1,String(val).length)*1.25);
+      const top=p.y-(ln.length===2?fs*1.1:fs*.6);inner=`<text x="${p.x}" y="${top}" text-anchor="middle" dominant-baseline="central" font-family="var(--f-display)" font-weight="700" font-size="${numSize}" fill="var(--ink)">${val}</text>`+ln.map((l,j)=>`<text x="${p.x}" y="${top+numSize*.62+fs*.75+j*fs*1.12}" text-anchor="middle" dominant-baseline="central" font-size="${fsFit.toFixed(1)}" fill="var(--muted)">${esc(l)}</text>`).join('')}
+    svg+=`<g class="gnode" data-i="${i}" data-key="${esc(key(g))}" role="button" tabindex="0" aria-label="${esc(g.label)}: ${val}" filter="url(#sh)"><circle cx="${p.x}" cy="${p.y}" r="${p.r+4}" fill="none" stroke="${c}" stroke-opacity=".18" stroke-width="3"/><circle class="disc" cx="${p.x}" cy="${p.y}" r="${p.r}" fill="url(#pearl)" stroke="${c}" stroke-width="1.8"/>${inner}<title>${esc(g.label)}</title></g>`});
+  // núcleo dourado
+  const coreLabel=current?current.label:'Órbita';const cl=wrapLabel(coreLabel,12);
+  svg+=`<g class="gnode" data-core="1" data-key="${esc(current?current.label:'Órbita')}" role="button" tabindex="0" aria-label="${current?'Voltar um nível':'Órbita'}" filter="url(#sh)"><circle cx="${cx}" cy="${cy}" r="${coreR+6}" fill="none" stroke="var(--gold-c)" stroke-opacity=".25" stroke-width="4"/><circle class="disc" cx="${cx}" cy="${cy}" r="${coreR}" fill="url(#gold)" stroke="var(--gold-c)" stroke-width="1.6"/><text x="${cx}" y="${cy-9}" text-anchor="middle" dominant-baseline="central" font-family="var(--f-display)" font-weight="700" font-size="21" fill="var(--gold-ink)">${rows.length}</text>${cl.map((l,j)=>`<text x="${cx}" y="${cy+11+j*12}" text-anchor="middle" dominant-baseline="central" font-size="10.5" font-weight="600" fill="var(--gold-ink)">${esc(l)}</text>`).join('')}</g>`;
+  const crumbs=[{label:'Órbita',i:0},...gPath.map((s,i)=>({label:s.label,i:i+1}))];
+  const caption=gLens==='operation'&&!current?'Toque em Pacientes para descer pela base.':(D.metric==='amount'?'Tamanho do disco: receita registrada':'Tamanho do disco: soma das estrelas')+(mode==='patients'?' · cor: verde maior peso, vermelho menor':'');
+  view.innerHTML=`<h1>Órbita</h1>
+    <div class="chips" style="margin-top:10px">${LENSES.map(([v,l])=>`<button class="chip" data-lens="${v}" aria-pressed="${v===gLens}">${l}</button>`).join('')}</div>
+    <div class="crumb">${crumbs.map((c,i)=>i<crumbs.length-1?`<button data-crumb="${c.i}">${esc(c.label)}</button><span aria-hidden="true">›</span>`:`<span>${esc(c.label)}</span>`).join('')}</div>
+    <div class="mapwrap"><svg id="gsvg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Mapa da base">${svg}</svg></div>
+    ${pages>1?`<div class="pager"><button data-pg="-1" aria-label="Página anterior">‹</button><span>${gPage+1} de ${pages}</span><button data-pg="1" aria-label="Próxima página">›</button></div>`:''}
+    <div class="sub" style="margin-top:8px;text-align:center">${caption}</div>
+    <div id="glist"></div>`;
+  // continuidade espacial: cada disco sai de onde estava
+  const svgEl=$('#gsvg'),positions=new Map();
+  svgEl.querySelectorAll('.gnode').forEach(nd=>{const c=nd.querySelector('.disc');const x=+c.getAttribute('cx'),y=+c.getAttribute('cy'),r=+c.getAttribute('r');positions.set(nd.dataset.key,{x,y,r});
+    if(changed&&!reduceMotion()&&gScene){const o=gPrev.get(nd.dataset.key)||gPrev.get(current?.label)||{x:cx,y:cy,r};const s=Math.min(2,Math.max(.3,o.r/r));try{nd.animate([{transform:`translate(${o.x-x*s}px,${o.y-y*s}px) scale(${s})`,opacity:.35},{transform:'translate(0,0) scale(1)',opacity:1}],{duration:440,easing:'cubic-bezier(.22,.7,.2,1)'})}catch(e){}}});
+  if(changed&&!reduceMotion()&&gScene)svgEl.querySelectorAll('.glink').forEach(l=>{try{l.animate([{opacity:0},{opacity:1}],{duration:440})}catch(e){}});
+  gPrev=positions;gScene=scene;
+  // interação
+  const act=nd=>{
+    if(nd.dataset.core){if(gPath.length){gPath.pop();gPage=0;gList=null;vMapa()}return}
+    if(nd.dataset.anc!=null){gPath=gPath.slice(0,+nd.dataset.anc);gPage=0;gList=null;vMapa();return}
+    const g=gShown[+nd.dataset.i];if(!g)return;
+    if(g.view){go(g.view);return}
+    if(g.more){maisSec=g.more;go('mais');return}
+    if(g.financial){if(g.rows.length===1){openPatient(g.rows[0].id);return}gList=g;drawList();return}
+    gPath.push({...g,nextMode:g.nextMode||'patients'});gPage=0;gList=null;vMapa();
+  };
+  svgEl.querySelectorAll('.gnode').forEach(nd=>{nd.addEventListener('click',()=>act(nd));nd.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act(nd)}})});
+  view.querySelectorAll('[data-lens]').forEach(b=>b.onclick=()=>{gLens=b.dataset.lens;gPath=[];gPage=0;gList=null;vMapa()});
+  view.querySelectorAll('[data-crumb]').forEach(b=>b.onclick=()=>{gPath=gPath.slice(0,+b.dataset.crumb);gPage=0;gList=null;vMapa()});
+  view.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{gPage=Math.max(0,Math.min(pages-1,gPage+ +b.dataset.pg));vMapa()});
+  function drawList(){
+    const box=$('#glist');const seg=gList||(current&&!(gLens==='operation'&&!current)?{label:current.label,rows}:null);
+    if(!seg){box.innerHTML='';return}
+    const l=[...seg.rows];if(seg.sort)sortPatients(l,seg.sort);else sortPatients(l,'stars');
+    box.innerHTML=`<h2>${esc(seg.label)} · ${l.length}</h2><div class="list">${l.slice(0,30).map(p=>patCard(p)).join('')}</div>${l.length>30?`<div class="btns"><button class="btn ghost" id="allseg">Ver os ${l.length} em Pacientes</button></div>`:''}`;
+    bindCards(box);const a=$('#allseg');if(a)a.onclick=()=>{pSubset={label:seg.label,ids:l.map(p=>p.id)};pq='';pCity='Todas';pOrd=seg.sort||'stars';go('pacientes')};
+  }
+  drawList();
+}
+
+/* =====================================================================
+   Mais: financeiro, planos, pendências, campanhas, sincronização
+   ===================================================================== */
+let maisSec='financeiro',finPeriod=12;
+function barChart(rows,{valueKey='v',costKey=null,label=r=>r.l}){
+  const W=340,H=190,pad=28,max=Math.max(...rows.map(r=>r[valueKey]),1),bw=Math.min(26,(W-pad*2)/rows.length*.62);
+  let s=[0,.5,1].map(t=>{const y=H-pad-t*(H-pad*2);return `<line x1="${pad}" x2="${W-4}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pad-4}" y="${y+3}" font-size="9" text-anchor="end" fill="var(--muted)">${Math.round(t*max/1000)}k</text>`}).join('');
+  rows.forEach((r,i)=>{const x=pad+(i+.5)*(W-pad*2)/rows.length-bw/2,h=r[valueKey]/max*(H-pad*2);s+=`<rect x="${x}" y="${H-pad-h}" width="${bw}" height="${Math.max(h,r[valueKey]?2:0)}" rx="4" fill="var(--accent)" opacity="${i===rows.length-1?1:.6}"><title>${esc(label(r))}: ${brl(r[valueKey])}</title></rect>`;
+    if(costKey&&r[costKey]){const hc=r[costKey]/max*(H-pad*2);s+=`<rect x="${x+bw*.25}" y="${H-pad-hc}" width="${bw*.5}" height="${hc}" rx="2" fill="var(--warn)"><title>Custo: ${brl(r[costKey])}</title></rect>`}
+    if(rows.length<=12||i%2===0)s+=`<text x="${x+bw/2}" y="${H-10}" font-size="9.5" text-anchor="middle" fill="var(--muted)">${esc(label(r))}</text>`});
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico de barras">${s}</svg>`;
+}
+function hbars(entries){const max=entries.length?entries[0][1]:1;return `<div class="list">${entries.map(([k,v,n])=>`<div class="card" style="flex-direction:column;align-items:stretch;gap:6px"><div class="row" style="justify-content:space-between"><span>${esc(k)}${n!=null?` <span class="sub">· ${n}</span>`:''}</span><span class="money">${brl(v)}</span></div><div class="bar"><i style="width:${v/max*100}%"></i></div></div>`).join('')||'<div class="empty">Sem registros.</div>'}</div>`}
+function vMais(){
+  const secs=[['financeiro','Financeiro'],['planos','Planos'],['pendencias','Pendências'],['campanhas','Campanhas'],['retrato','Sincronização']];
+  let body='';
+  if(maisSec==='financeiro'){
+    const start=finPeriod==='all'?null:new Date(TODAY.getFullYear(),TODAY.getMonth()-(finPeriod-1),1);
+    const ev=D.events.filter(e=>{const d=parseDate(e.performed_on);return d&&d<=NOW&&(!start||d>=start)});
+    const fin=ev.filter(e=>e.amount!=null);
+    const months=[];const first=start||(fin.length?new Date(Math.min(...fin.map(e=>parseDate(e.performed_on)))):TODAY);
+    for(let d=new Date(first.getFullYear(),first.getMonth(),1);d<=TODAY;d=new Date(d.getFullYear(),d.getMonth()+1,1))months.push({m:d,v:0,c:0,l:d.toLocaleDateString('pt-BR',{month:'short'}).replace('.','')+(finPeriod==='all'?'/'+String(d.getFullYear()).slice(2):'')});
+    fin.forEach(e=>{const d=parseDate(e.performed_on);const b=months.find(x=>x.m.getFullYear()===d.getFullYear()&&x.m.getMonth()===d.getMonth());if(b){b.v+=e.amount;b.c+=e.cost||0}});
+    const tot=fin.reduce((s,e)=>s+e.amount,0),cost=fin.filter(e=>e.cost!=null).reduce((s,e)=>s+e.cost,0);
+    const byFam={},byCity={};fin.forEach(e=>{const f=family(e.procedure);byFam[f]=byFam[f]||[0,new Set()];byFam[f][0]+=e.amount;byFam[f][1].add(e.patient_id);const c=e.city||'Praça não informada';byCity[c]=byCity[c]||[0,new Set()];byCity[c][0]+=e.amount;byCity[c][1].add(e.patient_id)});
+    const fe=Object.entries(byFam).map(([k,[v,s]])=>[k,v,s.size+' pac.']).sort((a,b)=>b[1]-a[1]),ce=Object.entries(byCity).map(([k,[v,s]])=>[k,v,s.size+' pac.']).sort((a,b)=>b[1]-a[1]);
+    body=`<div class="seg"><button data-fp="6" aria-pressed="${finPeriod===6}">6 meses</button><button data-fp="12" aria-pressed="${finPeriod===12}">12 meses</button><button data-fp="all" aria-pressed="${finPeriod==='all'}">Tudo</button></div>
+      <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="stat"><div class="n money" style="font-size:20px">${brl(tot)}</div><div class="l">receita registrada</div></div><div class="stat"><div class="n money" style="font-size:20px">${brl(tot-cost)}</div><div class="l">menos custos registrados</div></div></div>
+      <h2>Por mês</h2><div class="chart card" style="display:block">${barChart(months.length>24?months.slice(-24):months,{costKey:'c'})}<div class="legend"><span><i style="background:var(--accent)"></i>receita</span><span><i style="background:var(--warn)"></i>custo</span></div></div>
+      <h2>Por procedimento</h2>${hbars(fe)}<h2>Por praça</h2>${hbars(ce)}
+      <p class="sub" style="margin-top:12px">${ev.length} realizações datadas, ${fin.length} com valor. Margem subtrai só custos registrados e não é lucro líquido. Mês sem registro não prova receita zero.</p>`;
+  }
+  if(maisSec==='planos'){
+    const pl=D.plans.filter(p=>!['concluido','recusado','cancelado'].includes(p.status)).map(p=>{const it=D.items.filter(i=>i.plan_id===p.id);const nx=it.filter(openItem).map(i=>i.scheduled_on).filter(Boolean).sort()[0]||p.next_date;return{p,it,nx}}).sort((a,b)=>(a.nx||'9999').localeCompare(b.nx||'9999'));
+    const pot=pl.reduce((s,x)=>s+(x.p.total||0),0);
+    body=`<div class="sub">${pl.length} planos em aberto · potencial somado ${brl(pot)} (100% de adesão, não é receita garantida). Datas são previsões e não reservam agenda.</div><div class="list" style="margin-top:10px">${pl.map(({p,it,nx})=>{const done=it.filter(i=>i.status==='realizado').length;const pat=D.byId.get(p.patient_id);return `<button class="card" ${pat?`data-pac="${esc(pat.id)}"`:''} style="flex-direction:column;align-items:stretch;gap:6px"><div class="row" style="justify-content:space-between"><b style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.patient_name)}</b><span class="money">${brl(p.total)}</span></div><div class="m">${esc(p.title)} · ${esc(p.status)}</div>${it.length?`<div class="bar"><i style="width:${done/it.length*100}%"></i></div><div class="m">${done} de ${it.length} sessões · próxima ${nx?fmtDY(parseDate(nx)):'sem data'}${nx&&parseDate(nx)<TODAY?' <span class="pill p-late">atrasada</span>':''}</div>`:''}</button>`}).join('')||'<div class="empty">Nenhum plano em aberto.</div>'}</div>`;
+  }
+  if(maisSec==='pendencias'){
+    const ts=D.tasks.filter(openTask).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
+    const its=D.items.filter(i=>openItem(i)&&i.scheduled_on&&parseDate(i.scheduled_on)<=addDays(TODAY,30)).sort((a,b)=>a.scheduled_on.localeCompare(b.scheduled_on));
+    const fams={};its.forEach(i=>{const f=family(i.procedure);(fams[f]=fams[f]||[]).push(i)});
+    body=`<h2 style="margin-top:6px">Pendências · ${ts.length}</h2><div class="list">${ts.map(t=>{const p=D.byId.get(t.patient_id);const late=t.due_date&&parseDate(t.due_date)<TODAY;return `<button class="card" ${p?`data-pac="${esc(p.id)}"`:''}><span class="time">${t.due_date?fmtD(parseDate(t.due_date)):'—'}</span><span class="grow"><span class="t">${esc(t.title)}</span><span class="m">${esc(t.patient_name||'Sem paciente')}${t.category?' · '+esc(t.category):''}</span></span>${late?'<span class="pill p-late">atrasada</span>':''}</button>`}).join('')||'<div class="empty">Sem pendências abertas.</div>'}</div>
+      <h2>Acompanhamentos até ${fmtD(addDays(TODAY,30))}</h2>${Object.entries(fams).map(([f,l])=>`<div class="sub" style="margin:10px 0 6px;font-weight:600">${esc(f)} · ${l.length}</div><div class="list">${l.map(i=>{const p=D.byId.get(i.patient_id);return p?`<button class="card" data-pac="${esc(p.id)}"><span class="time">${fmtD(parseDate(i.scheduled_on))}</span><span class="grow"><span class="t">${esc(p.name)}</span><span class="m">${esc(i.procedure)}${i.session?' · '+i.session+'/'+i.sessions:''}</span></span>${parseDate(i.scheduled_on)<TODAY?'<span class="pill p-late">atrasada</span>':''}</button>`:''}).join('')}</div>`).join('')||'<div class="empty">Nada previsto.</div>'}`;
+  }
+  if(maisSec==='campanhas'){
+    const seeds=[['01-01','Ano novo e férias de verão'],['03-08','Dia Internacional da Mulher'],['03-15','Dia do Consumidor'],['04-01','Planejamento de outono'],['05-01','Mês das noivas'],['06-01','Planejamento de inverno'],['06-12','Dia dos Namorados'],['07-01','Férias de julho'],['07-26','Dia dos Avós'],['08-15','Dia dos Solteiros'],['09-15','Dia do Cliente'],['09-23','Planejamento de primavera'],['10-01','Dia da Pessoa Idosa'],['10-15','Dia dos Professores'],['11-01','Preparação para festas e verão'],['12-01','Festas, formaturas e férias'],['12-25','Natal'],['12-31','Réveillon']];
+    const it=[...D.campaigns.map(c=>({d:nextOccurrence(c),t:c.title,who:c.patient_name,notes:c.notes,status:c.status,personal:!!c.patient_name})),...seeds.map(([md,t])=>({d:nextOccurrence({event_date:TODAY.getFullYear()+'-'+md,annual:1}),t,personal:false}))].filter(x=>x.d&&x.d<=addDays(TODAY,90)).sort((a,b)=>a.d-b.d);
+    body=`<div class="sub">Próximos 90 dias. Nada é enviado daqui.</div><div class="list" style="margin-top:10px">${it.map(x=>{const p=x.who?D.match(x.who):null;return `<button class="card" ${p?`data-pac="${esc(p.id)}"`:''}><span class="time">${fmtD(x.d)}</span><span class="grow"><span class="t">${esc(x.t)}</span><span class="m">${esc(x.who&&x.who!=='Base a segmentar'?x.who:'Calendário sazonal')}${x.status?' · '+esc(x.status):''}</span></span><span class="pill ${x.personal?'p-ok':'p-ggl'}">${x.personal?'pessoal':'sazonal'}</span></button>`}).join('')||'<div class="empty">Sem datas.</div>'}</div>`;
+  }
+  if(maisSec==='retrato'){
+    const ag=D.raw.agenda||{};const src=(k,l)=>{const s=ag[k]||{};const t=parseDate(s.atualizado_em);return `<dt>${l}</dt><dd>${t?fmtDY(t)+' '+fmtH(t):'sem leitura'}${s.erro?'<br><span style="color:var(--late)">'+esc(s.erro)+'</span>':''} · ${(s.itens||[]).length} itens</dd>`};
+    body=`<dl class="kv"><dt>Retrato gerado</dt><dd>${D.generated?fmtDY(D.generated)+' às '+fmtH(D.generated):'—'}</dd><dt>Conferido</dt><dd id="checked">${lastCheck?fmtDY(lastCheck)+' às '+fmtH(lastCheck):'—'}</dd><dt>Pacientes</dt><dd>${D.patients.length}</dd>${src('gestaods','GestãoDS')}${src('lequartier','Le Quartier')}${src('google','Google Agenda')}<dt>Origem</dt><dd>Mac, a cada 15 minutos com o Mac ligado e o Órbita aberto</dd><dt>Proteção</dt><dd>Arquivo cifrado (AES-256); abre só com a sua senha</dd></dl>
+      <div class="btns">${D.raw.demo?'':'<button class="btn" id="refresh">Buscar retrato agora</button><button class="btn ghost" id="forget">Apagar dados deste iPhone</button>'}</div>
+      <h2>Entra no retrato</h2><div class="timeline"><div>Agenda das três origens (janela que o Mac carregou)</div><div>Pacientes, contatos, estrelas, recência e notas</div><div>Realizações com valor e custo</div><div>Planos, sessões previstas e pendências</div><div>Campanhas e datas pessoais</div></div>
+      <h2>Fica no Mac</h2><div class="timeline"><div>Criar, confirmar, remarcar e cancelar</div><div>Prescrição Memed e mensagens em lote</div><div>Texto de prontuário (continua no GestãoDS)</div><div>CPF</div></div>`;
+  }
+  view.innerHTML=`<h1>Mais</h1><div class="chips" style="margin:12px 0 4px">${secs.map(([v,l])=>`<button class="chip" data-s="${v}" aria-pressed="${v===maisSec}">${l}</button>`).join('')}</div><div style="margin-top:10px">${body}</div>`;
+  view.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{maisSec=b.dataset.s;vMais()});
+  view.querySelectorAll('[data-fp]').forEach(b=>b.onclick=()=>{finPeriod=b.dataset.fp==='all'?'all':+b.dataset.fp;vMais()});
+  const r=$('#refresh');if(r)r.onclick=()=>refresh(true);
+  const f=$('#forget');if(f)f.onclick=async()=>{await idb.clear();store.del('orbita_tab');D=null;showSetup('Dados apagados deste iPhone.')};
+  bindCards(view);
+}
+
+/* =====================================================================
+   Navegação, retrato e configuração
+   ===================================================================== */
+const VIEWS={hoje:vHoje,agenda:vAgenda,pacientes:vPacientes,mapa:vMapa,mais:vMais};
+let curTab='hoje',lastCheck=null,offline=false;
+function go(tab){curTab=tab;document.querySelectorAll('nav.tabs [data-tab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));VIEWS[tab]();store.set('orbita_tab',tab);window.scrollTo(0,0)}
+document.querySelectorAll('nav.tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.tab==='mapa'&&curTab==='mapa'){gPath=[];gPage=0;gList=null}go(b.dataset.tab)}));
+function header(){
+  const s=$('#snap');if(!D){s.innerHTML='';return}
+  const g=D.generated,age=g?(NOW-g)/36e5:null;
+  s.innerHTML=g?`Retrato de <b>${fmtD(g)} · ${fmtH(g)}</b><br><span class="${age>6?'old':''}">${offline?'sem internet, retrato salvo':D.raw.demo?'dados fictícios':age>6?'Mac sem enviar há '+Math.floor(age)+' h':'sincronizado pelo Mac'}</span>`:'';
+  $('#banner').innerHTML=D.raw.demo?'<div class="note" role="note">Demonstração com dados fictícios. Nenhum paciente real aparece aqui.</div>':'';
+}
+function render(raw){NOW=new Date();TODAY=startOf(NOW);D=build(raw);$('#tabs').hidden=false;header();const t=store.get('orbita_tab');go(VIEWS[t]?t:curTab)}
+async function fetchRemote(token,etag){
+  const r=await fetch(`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28',...(etag?{'If-None-Match':etag}:{})},cache:'no-store'});
+  if(r.status===304)return{same:true};
+  if(r.status===401||r.status===403)throw new Error('A chave do GitHub não abriu o repositório. Confira se ela lê o orbita-dados e se não expirou.');
+  if(r.status===404)throw new Error('Retrato ainda não encontrado no GitHub. O Mac precisa enviar o primeiro.');
+  if(!r.ok)throw new Error('GitHub respondeu '+r.status+'.');
+  return{buf:await r.arrayBuffer(),etag:r.headers.get('ETag')};
+}
+async function refresh(manual){
+  const token=await idb.get('token');let pass=await idb.get('pass')||sessionPass;
+  if(!token||!pass){showSetup();return}
+  try{
+    const etag=await idb.get('etag');const got=await fetchRemote(token,manual?null:etag);
+    lastCheck=new Date();offline=false;await idb.set('checked',lastCheck.toISOString());
+    if(got.same){header();if(manual)toast('Já está com o retrato mais recente.');if(curTab==='mais'&&maisSec==='retrato')vMais();return}
+    const raw=await decryptSnapshot(got.buf,pass);
+    await idb.set('blob',got.buf);await idb.set('etag',got.etag);
+    render(raw);if(manual)toast('Retrato atualizado.');
+  }catch(e){
+    if(e instanceof TypeError){offline=true;header();if(manual)toast('Sem internet. Continua o retrato salvo.');return}
+    if(!D){showSetup(e.message);return}
+    toast(e.message);
+  }
+}
+let sessionPass=null;
+function showSetup(msg){
+  $('#tabs').hidden=true;$('#banner').innerHTML='';$('#snap').innerHTML='';
+  view.innerHTML=`<div class="setup"><h1>Órbita no iPhone</h1><p class="sub">Consulta do último retrato que o Mac enviou. Ele fica cifrado no GitHub e neste aparelho, e abre com a senha que você definiu no Mac.</p>
+    <label>Chave de leitura do GitHub<input class="field" id="tk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></label>
+    <label>Senha do retrato<input class="field" id="pw" type="password" autocomplete="current-password"></label>
+    <label class="chk"><input type="checkbox" id="rm" checked> Lembrar a senha neste iPhone</label>
+    <div class="err" id="er">${esc(msg||'')}</div>
+    <button class="btn" id="go">Abrir o retrato</button>
+    <button class="btn ghost" id="demo">Ver com dados fictícios</button></div>`;
+  idb.get('token').then(t=>{if(t)$('#tk').value=t});
+  $('#demo').onclick=()=>render(demoSnapshot());
+  $('#go').onclick=async()=>{
+    const tk=$('#tk').value.trim(),pw=$('#pw').value;const er=$('#er'),b=$('#go');
+    if(!tk||!pw){er.textContent='Preencha a chave e a senha.';return}
+    b.disabled=true;er.textContent='Baixando e abrindo…';
+    try{const got=await fetchRemote(tk,null);const raw=await decryptSnapshot(got.buf,pw);
+      await idb.set('token',tk);await idb.set('blob',got.buf);await idb.set('etag',got.etag);lastCheck=new Date();
+      if($('#rm').checked)await idb.set('pass',pw);else{sessionPass=pw;await idb.set('pass',null)}
+      render(raw);
+    }catch(e){er.textContent=e instanceof TypeError?'Sem conexão com o GitHub agora.':e.message;b.disabled=false}
+  };
+}
+async function boot(){
+  if(DEMO){window.__orbitaDemo=demoSnapshot;render(demoSnapshot());return}
+  if('serviceWorker' in navigator){try{navigator.serviceWorker.register('sw.js')}catch(e){}}
+  const blob=await idb.get('blob'),pass=await idb.get('pass');const ck=await idb.get('checked');if(ck)lastCheck=new Date(ck);
+  if(blob&&pass){try{render(await decryptSnapshot(blob,pass))}catch(e){showSetup(e.message);return}refresh(false);return}
+  showSetup();
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&D&&!D.raw.demo){refresh(false)}else if(document.visibilityState==='visible'&&D){NOW=new Date();TODAY=startOf(NOW);header()}});
+boot();
+})();
+</script>
+</body>
+</html>
