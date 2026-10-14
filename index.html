@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
 <style>
 /* App de uma tela: cabeçalho com a hora do retrato, conteúdo rolável, abas embaixo, ficha em folha que sobe. */
 :root{
@@ -698,7 +698,9 @@ function header(){
 let firstRender=true;
 function render(raw){NOW=new Date();TODAY=startOf(NOW);D=build(raw);$('#tabs').hidden=false;header();go(firstRender?'mapa':curTab);firstRender=false}
 async function fetchRemote(token,etag){
-  const r=await fetch(`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28',...(etag?{'If-None-Match':etag}:{})},cache:'no-store'});
+  const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),20000);
+  let r;try{r=await fetch(`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28',...(etag?{'If-None-Match':etag}:{})},cache:'no-store',signal:ctl.signal})}
+  catch(e){throw new TypeError('rede')}finally{clearTimeout(tm)}
   if(r.status===304)return{same:true};
   if(r.status===401||r.status===403)throw new Error('A chave do GitHub não abriu o repositório. Confira se ela lê o orbita-dados e se não expirou.');
   if(r.status===404)throw new Error('O GitHub não mostrou o retrato para esta chave. Confira se o token tem o repositório orbita-dados marcado e a permissão Contents: Read-only. Se tiver, o Mac ainda não enviou o primeiro retrato.');
