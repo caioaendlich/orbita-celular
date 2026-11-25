@@ -510,11 +510,10 @@ async function openBooking(day){
   function form(tk,medicos,servicos){
     const now=new Date(),start=new Date(day||TODAY);
     let hh=9,mm=0;if(isoDay(start)===isoDay(now)){const t=new Date(now);t.setMinutes(Math.ceil((t.getMinutes()+15)/15)*15,0,0);hh=t.getHours();mm=t.getMinutes()}
-    const names=[...new Set(D.patients.map(p=>p.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
     show(`<h1 style="font-size:22px;margin:0">Novo agendamento</h1>
       <p class="sub">Vai direto para o GestãoDS. Confira antes de criar.</p>
-      <label ${lab}>Paciente<input class="field" id="bkNome" list="bkNomes" autocomplete="off" placeholder="Nome como está no cadastro"></label>
-      <datalist id="bkNomes">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+      <label ${lab}>Paciente<input class="field" id="bkNome" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Comece a digitar o nome"></label>
+      <div id="bkSug" class="list" style="margin-top:6px" hidden></div>
       <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="bkNovo"> Paciente novo: cadastrar no GestãoDS</label>
       <label ${lab}>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Em branco: eu busco pelo celular do cadastro"></label>
       <p class="sub" id="bkFone" style="margin:4px 0 0"></p>
@@ -538,7 +537,22 @@ async function openBooking(day){
     const tipo=$('#bkTipo'),servL=$('#bkServL');
     const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value);if(servL.hidden)$('#bkServ').value=''};tipo.onchange=syncTipo;syncTipo();
     let pat=null;
-    $('#bkNome').oninput=()=>{const l=D.patients.filter(p=>norm(p.name)===norm($('#bkNome').value));pat=l.length===1?l[0]:null;$('#bkFone').textContent=pat?(pat.phone?'Celular no cadastro: '+pat.phone:'Sem celular no cadastro: digite o CPF.'):''};
+    // Sugestões enquanto digita: todas as palavras digitadas precisam aparecer no nome; quem começa com o texto vem primeiro.
+    const nomeIn=$('#bkNome'),sug=$('#bkSug');
+    const showFone=()=>{$('#bkFone').textContent=pat?(pat.phone?'Celular no cadastro: '+pat.phone:'Sem celular no cadastro: digite o CPF.'):''};
+    const pick=p=>{pat=p;nomeIn.value=p.name;sug.hidden=true;sug.innerHTML='';showFone();if($('#bkNovo').checked&&p.phone&&!$('#bkCel').value)$('#bkCel').value=p.phone};
+    nomeIn.oninput=()=>{
+      const q=norm(nomeIn.value),parts=q.split(' ').filter(Boolean);
+      const exact=D.patients.filter(p=>norm(p.name)===q);pat=exact.length===1?exact[0]:null;showFone();
+      if(q.length<2){sug.hidden=true;sug.innerHTML='';return}
+      const hits=D.patients.filter(p=>p.name&&parts.every(t=>norm(p.name).includes(t))).sort((a,b)=>(norm(b.name).startsWith(q)-norm(a.name).startsWith(q))||a.name.localeCompare(b.name,'pt-BR')).slice(0,8);
+      if(!hits.length||(hits.length===1&&pat===hits[0])){sug.hidden=true;sug.innerHTML='';return}
+      sug.innerHTML=hits.map((p,i)=>`<button type="button" class="card" data-i="${i}" style="display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:10px 14px"><span style="min-width:0">${esc(p.name)}</span><span class="sub" style="white-space:nowrap">${esc(p.phone||(p.city&&p.city!=='A classificar'?p.city:''))}</span></button>`).join('');
+      sug.querySelectorAll('[data-i]').forEach(b=>{b.onpointerdown=e=>e.preventDefault();b.onclick=()=>pick(hits[+b.dataset.i])});
+      sug.hidden=false;
+    };
+    nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true},150);
+    nomeIn.onfocus=()=>{if(nomeIn.value.trim().length>=2&&!pat)nomeIn.oninput()};
     $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
     const novo=$('#bkNovo');novo.onchange=()=>{$('#bkNovoF').hidden=!novo.checked;$('#bkSoCad').hidden=!novo.checked;$('#bkCpf').placeholder=novo.checked?'Obrigatório para cadastrar':'Em branco: eu busco pelo celular do cadastro';if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
     // Cadastro no GestãoDS: POST paciente/cadastrar/ (nome_completo, cpf e email obrigatórios; doc openapi consultada em 25/11/2026)
