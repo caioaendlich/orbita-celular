@@ -440,19 +440,136 @@ function vAgenda(){
   const vis=D.agenda.filter(e=>agSrc[e.src]);
   const list=agMode==='dia'?vis.filter(e=>e.ini>=sel&&e.ini<addDays(sel,1)):vis.filter(e=>e.ini>=TODAY&&!e.off);
   const days=[];for(let d=from;d<=to;d++)days.push(d);
-  view.innerHTML=`<h1>Agenda</h1>
+  view.innerHTML=`<div class="row" style="justify-content:space-between"><h1>Agenda</h1>${D.raw.demo?'':'<button class="btn" id="novoAg" style="padding:9px 14px">+ Novo</button>'}</div>
     <div class="seg" role="group" aria-label="Período"><button data-mode="dia" aria-pressed="${agMode==='dia'}">Por dia</button><button data-mode="lista" aria-pressed="${agMode==='lista'}">Daqui para frente</button></div>
     ${agMode==='dia'?`<div class="days">${days.map(d=>{const dt=addDays(TODAY,d);const fs=[...new Set(vis.filter(e=>e.ini>=dt&&e.ini<addDays(dt,1)&&!e.off).map(e=>e.src))];
       return `<button class="day" data-d="${d}" aria-pressed="${d===agDay}"><div class="w">${d===0?'hoje':w[dt.getDay()]}</div><div class="d">${dt.getDate()}</div><div class="dots">${fs.map(f=>`<span style="background:var(--${f})"></span>`).join('')}</div></button>`}).join('')}</div>`:''}
     <div class="chips" style="margin-top:8px">${Object.entries(FONTE).map(([k,l])=>`<button class="chip" data-src="${k}" aria-pressed="${agSrc[k]}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--${k});margin-right:6px"></span>${l}</button>`).join('')}</div>
     <div class="sub" style="margin:8px 0 10px">${agMode==='dia'?sel.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})+' · '+list.filter(e=>!e.off).length+' compromissos':list.length+' compromissos a partir de hoje'}</div>
     <div class="list">${list.map(e=>evCard(e,agMode!=='dia')).join('')||'<div class="empty">Nada neste dia.</div>'}</div>
-    <p class="sub" style="margin-top:14px">Criar, confirmar e remarcar continuam no Mac. Aqui é consulta do último retrato.</p>`;
+    <p class="sub" style="margin-top:14px">“+ Novo” cria direto no GestãoDS. Confirmar e remarcar continuam no Mac. O resto é consulta do último retrato.</p>`;
+  const nb=view.querySelector('#novoAg');if(nb)nb.onclick=()=>openBooking(agMode==='dia'&&sel>=TODAY?sel:TODAY);
   view.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{agMode=b.dataset.mode;vAgenda()});
   view.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{agDay=+b.dataset.d;vAgenda()});
   view.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{agSrc[b.dataset.src]=!agSrc[b.dataset.src];vAgenda()});
   const cur=view.querySelector('.day[aria-pressed="true"]');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
   bindCards(view);
+}
+
+/* =====================================================================
+   Novo agendamento direto no GestãoDS (pedido de Caio, 25/11/2026)
+   O celular fala com a API do GestãoDS sem passar pelo Mac. O token fica
+   neste iPhone (IndexedDB), como o token do GitHub e a senha do retrato.
+   ===================================================================== */
+const GDS='https://devapi.gestaods.com.br/api/v2/',GDS_WEB='https://app.gestaods.com.br/agenda/medico/';
+const GDS_TIPOS=[['consulta','Consulta'],['retorno','Retorno'],['procedimento','Procedimento'],['exame','Exame'],['cirurgia','Cirurgia'],['vacina','Vacina']];
+const GDS_SERV=new Set(['exame','cirurgia','procedimento']);
+async function gdsCall(path,token,body,method){
+  const h={'Authorization':'Bearer '+token,'Accept':'application/json'};if(body!==undefined)h['Content-Type']='application/json';
+  let r;try{r=await fetch(GDS+path,{method:method||(body!==undefined?'POST':'GET'),headers:h,body:body!==undefined?JSON.stringify(body):undefined,cache:'no-store'})}
+  catch(e){const err=new Error('O GestãoDS não respondeu ao celular. Pode ser falta de internet ou bloqueio do GestãoDS a chamadas vindas do navegador.');err.blocked=true;throw err}
+  let j=null;try{j=await r.json()}catch(e){}
+  return{http:r.status,body:j};
+}
+function gdsList(b){if(Array.isArray(b))return b;if(b&&Array.isArray(b.data))return b.data;const o=b&&typeof b==='object'?(b.data&&typeof b.data==='object'?b.data:b):{};return Object.entries(o).flatMap(([cat,it])=>Array.isArray(it)?it.filter(x=>x&&typeof x==='object').map(x=>({...x,categoria:cat})):[])}
+const gdsLabel=o=>o.nome||o.nome_completo||o.descricao||o.label||('ID '+o.id);
+function gdsMsg(b){if(!b)return'';if(typeof b==='string')return b;const m=b.mensagem||b.message||b.detail||b.erro||b.error||b.errors;return(typeof m==='string'?m:JSON.stringify(m||b)).slice(0,300)}
+function pickCpf(o){if(!o||typeof o!=='object')return'';for(const[k,v]of Object.entries(o)){if(['cpf','cpfpaciente','numerocpf','documentocpf'].includes(String(k).toLowerCase().replace(/_/g,''))){const d=String(v||'').replace(/\D/g,'');if(d.length===11)return d}}for(const v of Object.values(o)){if(v&&typeof v==='object'){const c=pickCpf(v);if(c)return c}}return''}
+const pad2=n=>String(n).padStart(2,'0');
+const apiDT=d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
+const isoDay=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+async function openBooking(day){
+  const sheet=$('#sheet'),bg=$('#sheetBg');
+  const close=()=>{bg.classList.remove('on');sheet.classList.remove('on');setTimeout(()=>{bg.hidden=true;sheet.hidden=true},250)};
+  const show=html=>{sheet.innerHTML='<div class="grab"></div>'+html;bg.hidden=false;sheet.hidden=false;requestAnimationFrame(()=>{bg.classList.add('on');sheet.classList.add('on')});sheet.scrollTop=0;bg.onclick=close;sheet.querySelectorAll('[data-fechar]').forEach(b=>b.onclick=close)};
+  const lab='style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px"';
+  const webBtn=`<a class="btn ghost" href="${GDS_WEB}" target="_blank" rel="noopener noreferrer">Abrir o GestãoDS</a>`;
+  const token=await idb.get('gds_token');
+  if(!token)return connect();
+  return form(token,await idb.get('gds_medicos')||[],await idb.get('gds_servicos')||[]);
+
+  function connect(msg){
+    show(`<h1 style="font-size:22px;margin:0">Conectar o GestãoDS</h1>
+      <p class="sub">Cole o token de API do GestãoDS, o mesmo que você usa no Órbita do Mac. Ele fica salvo só neste iPhone.</p>
+      <label ${lab}>Token de API<input class="field" id="gdsTk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <p class="sub" id="gdsErr" style="color:var(--bad,#e5484d)">${esc(msg||'')}</p>
+      <div class="btns"><button class="btn" id="gdsGo">Conectar</button>${webBtn}<button class="btn ghost" data-fechar>Fechar</button></div>`);
+    $('#gdsGo').onclick=async()=>{
+      const tk=$('#gdsTk').value.trim(),b=$('#gdsGo'),er=$('#gdsErr');if(!tk){er.textContent='Cole o token.';return}
+      b.disabled=true;b.textContent='Conectando…';er.textContent='';
+      try{
+        const d=await gdsCall('core/medicos/',tk);
+        if(d.http!==200){er.textContent=d.http===401||d.http===403?'O GestãoDS recusou este token.':'O GestãoDS respondeu '+d.http+'. '+gdsMsg(d.body);return}
+        let sv=[];try{const s=await gdsCall('core/servicos-clinica/',tk);if(s.http===200)sv=gdsList(s.body)}catch(e){}
+        const md=gdsList(d.body);await idb.set('gds_token',tk);await idb.set('gds_medicos',md);await idb.set('gds_servicos',sv);
+        toast('GestãoDS conectado');form(tk,md,sv);
+      }catch(e){er.textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Conectar'}}
+    };
+  }
+
+  function form(tk,medicos,servicos){
+    const now=new Date(),start=new Date(day||TODAY);
+    let hh=9,mm=0;if(isoDay(start)===isoDay(now)){const t=new Date(now);t.setMinutes(Math.ceil((t.getMinutes()+15)/15)*15,0,0);hh=t.getHours();mm=t.getMinutes()}
+    const names=[...new Set(D.patients.map(p=>p.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    show(`<h1 style="font-size:22px;margin:0">Novo agendamento</h1>
+      <p class="sub">Vai direto para o GestãoDS. Confira antes de criar.</p>
+      <label ${lab}>Paciente<input class="field" id="bkNome" list="bkNomes" autocomplete="off" placeholder="Nome como está no cadastro"></label>
+      <datalist id="bkNomes">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+      <label ${lab}>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Em branco: eu busco pelo celular do cadastro"></label>
+      <p class="sub" id="bkFone" style="margin:4px 0 0"></p>
+      <label ${lab}>Médico<select class="field" id="bkMed">${medicos.map(m=>`<option value="${esc(m.id)}">${esc(gdsLabel(m))}</option>`).join('')||'<option value="">Nenhum médico carregado</option>'}</select></label>
+      <label ${lab}>Tipo<select class="field" id="bkTipo">${GDS_TIPOS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+      <label ${lab} id="bkServL" hidden>Serviço<select class="field" id="bkServ"><option value="">Escolha o serviço</option>${servicos.map(s=>`<option value="${esc(s.id)}">${esc(gdsLabel(s))}${s.categoria?' · '+esc(s.categoria):''}</option>`).join('')}</select></label>
+      <div class="row" style="gap:8px"><label ${lab} style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Data<input class="field" id="bkData" type="date" value="${isoDay(start)}"></label>
+      <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Hora<input class="field" id="bkHora" type="time" step="300" value="${pad2(hh)}:${pad2(mm)}"></label></div>
+      <label ${lab}>Duração<select class="field" id="bkDur">${[15,30,45,60,90,120,180].map(m=>`<option value="${m}"${m===60?' selected':''}>${m<60?m+' min':m/60+' h'+(m%60?' '+m%60+' min':'')}</option>`).join('')}</select></label>
+      <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="bkPrim"> Primeiro atendimento</label>
+      <label ${lab}>Observação<textarea class="field" id="bkObs" rows="2" maxlength="1000"></textarea></label>
+      <p class="sub" id="bkErr" style="color:var(--bad,#e5484d)"></p>
+      <div class="btns"><button class="btn" id="bkGo">Criar no GestãoDS</button><button class="btn ghost" data-fechar>Fechar</button></div>
+      <div class="btns" style="margin-top:4px">${webBtn}<button class="btn ghost" id="bkTroca">Trocar token</button></div>`);
+    const tipo=$('#bkTipo'),servL=$('#bkServL');
+    const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value)};tipo.onchange=syncTipo;syncTipo();
+    let pat=null;
+    $('#bkNome').oninput=()=>{const l=D.patients.filter(p=>norm(p.name)===norm($('#bkNome').value));pat=l.length===1?l[0]:null;$('#bkFone').textContent=pat?(pat.phone?'Celular no cadastro: '+pat.phone:'Sem celular no cadastro: digite o CPF.'):''};
+    $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
+    $('#bkGo').onclick=async()=>{
+      const b=$('#bkGo'),er=$('#bkErr');er.textContent='';
+      const nome=$('#bkNome').value.trim(),med=$('#bkMed').value,kind=tipo.value,sid=$('#bkServ').value,dt=$('#bkData').value,hr=$('#bkHora').value;
+      let cpf=$('#bkCpf').value.replace(/\D/g,'');
+      if(!nome){er.textContent='Informe o paciente.';return}
+      if(!med){er.textContent='Nenhum médico carregado. Use “Trocar token” para reconectar.';return}
+      if(!dt||!hr){er.textContent='Informe data e hora.';return}
+      if(GDS_SERV.has(kind)&&!sid){er.textContent='Escolha o serviço.';return}
+      if(cpf&&cpf.length!==11){er.textContent='O CPF precisa ter 11 dígitos.';return}
+      const ini=new Date(dt+'T'+hr+':00'),fim=new Date(ini.getTime()+(+$('#bkDur').value)*60000);
+      if(isNaN(ini)){er.textContent='Data ou hora inválida.';return}
+      b.disabled=true;b.textContent='Conferindo…';
+      try{
+        if(!cpf){
+          const cel=String(pat?.phone||'').replace(/\D/g,'');
+          if(cel.length<8){er.textContent='Sem CPF e sem celular no cadastro. Digite o CPF.';return}
+          const q=await gdsCall('paciente/',tk,{celular:cel});
+          if(q.http===401){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}
+          cpf=q.http===200?pickCpf(q.body):'';
+          if(!cpf){er.textContent='Não achei esse celular no GestãoDS. Digite o CPF.';$('#bkCpf').focus();return}
+          $('#bkCpf').value=cpf;
+        }
+        const quando=ini.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})+' às '+hr;
+        if(!confirm(`Criar ${GDS_TIPOS.find(t=>t[0]===kind)[1].toLowerCase()} de ${nome}\n${quando} (${$('#bkDur').selectedOptions[0].textContent})\ndireto no GestãoDS?`))return;
+        b.textContent='Criando no GestãoDS…';
+        const payload={cpf,medico_id:+med,tipo_agendamento:kind,data_agendamento:apiDT(ini),data_fim_agendamento:apiDT(fim),primeiro_atendimento:$('#bkPrim').checked};
+        const obs=$('#bkObs').value.trim();if(obs)payload.obs=obs;if(sid)payload.tipos_servicos_ids=[+sid];
+        const r=await gdsCall('agendamento/agendamento-livre/',tk,payload,'POST');
+        if(r.http===401){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo e tente de novo.')}
+        if(r.http<200||r.http>=300){er.textContent='O GestãoDS não criou ('+r.http+'). '+gdsMsg(r.body)+' O preenchimento foi mantido.';return}
+        const servNome=sid?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
+        D.agenda.push({src:'gds',ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
+        close();toast('Agendamento criado no GestãoDS');if(curTab==='agenda')vAgenda();
+      }catch(e){er.textContent=e.message+(e.blocked?' Use “Abrir o GestãoDS” para marcar por lá.':'')}
+      finally{if(b.isConnected){b.disabled=false;b.textContent='Criar no GestãoDS'}}
+    };
+  }
 }
 
 /* =====================================================================
@@ -672,7 +789,7 @@ function vMais(){
     body=`<dl class="kv"><dt>Retrato gerado</dt><dd>${D.generated?fmtDY(D.generated)+' às '+fmtH(D.generated):'—'}</dd><dt>Conferido</dt><dd id="checked">${lastCheck?fmtDY(lastCheck)+' às '+fmtH(lastCheck):'—'}</dd><dt>Pacientes</dt><dd>${D.patients.length}</dd>${src('gestaods','GestãoDS')}${src('lequartier','Le Quartier')}${src('google','Google Agenda')}<dt>Origem</dt><dd>Mac, a cada 15 minutos com o Mac ligado e o Órbita aberto</dd><dt>Proteção</dt><dd>Arquivo cifrado (AES-256); abre só com a sua senha</dd></dl>
       <div class="btns">${D.raw.demo?'':'<button class="btn" id="refresh">Buscar retrato agora</button><button class="btn ghost" id="forget">Apagar dados deste iPhone</button>'}</div>
       <h2>Entra no retrato</h2><div class="timeline"><div>Agenda das três origens (janela que o Mac carregou)</div><div>Pacientes, contatos, estrelas, recência e notas</div><div>Realizações com valor e custo</div><div>Planos, sessões previstas e pendências</div><div>Campanhas e datas pessoais</div></div>
-      <h2>Fica no Mac</h2><div class="timeline"><div>Criar, confirmar, remarcar e cancelar</div><div>Prescrição Memed e mensagens em lote</div><div>Texto de prontuário (continua no GestãoDS)</div><div>CPF</div></div>`;
+      <h2>Fica no Mac</h2><div class="timeline"><div>Confirmar, remarcar e cancelar (criar já dá pelo “+ Novo” da Agenda)</div><div>Prescrição Memed e mensagens em lote</div><div>Texto de prontuário (continua no GestãoDS)</div><div>CPF</div></div>`;
   }
   view.innerHTML=`<h1>Mais</h1><div class="chips" style="margin:12px 0 4px">${secs.map(([v,l])=>`<button class="chip" data-s="${v}" aria-pressed="${v===maisSec}">${l}</button>`).join('')}</div><div style="margin-top:10px">${body}</div>`;
   view.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{maisSec=b.dataset.s;vMais()});
