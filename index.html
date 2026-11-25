@@ -515,8 +515,15 @@ async function openBooking(day){
       <p class="sub">Vai direto para o GestãoDS. Confira antes de criar.</p>
       <label ${lab}>Paciente<input class="field" id="bkNome" list="bkNomes" autocomplete="off" placeholder="Nome como está no cadastro"></label>
       <datalist id="bkNomes">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+      <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="bkNovo"> Paciente novo: cadastrar no GestãoDS</label>
       <label ${lab}>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Em branco: eu busco pelo celular do cadastro"></label>
       <p class="sub" id="bkFone" style="margin:4px 0 0"></p>
+      <div id="bkNovoF" hidden>
+        <label ${lab}>Celular<input class="field" id="bkCel" type="tel" inputmode="tel" autocomplete="off" placeholder="(27) 99999-9999"></label>
+        <label ${lab}>E-mail (o GestãoDS exige)<input class="field" id="bkEmail" type="email" inputmode="email" autocapitalize="off" autocomplete="off"></label>
+        <div class="row" style="gap:8px"><label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Nascimento<input class="field" id="bkNasc" type="date"></label>
+        <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Sexo<select class="field" id="bkSexo"><option value="">—</option><option value="F">F</option><option value="M">M</option></select></label></div>
+      </div>
       <label ${lab}>Médico<select class="field" id="bkMed">${medicos.map(m=>`<option value="${esc(m.id)}">${esc(gdsLabel(m))}</option>`).join('')||'<option value="">Nenhum médico carregado</option>'}</select></label>
       <label ${lab}>Tipo<select class="field" id="bkTipo">${GDS_TIPOS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
       <label ${lab} id="bkServL" hidden>Serviço<select class="field" id="bkServ"><option value="">Escolha o serviço</option>${servicos.map(s=>`<option value="${esc(s.id)}">${esc(gdsLabel(s))}${s.categoria?' · '+esc(s.categoria):''}</option>`).join('')}</select></label>
@@ -526,13 +533,28 @@ async function openBooking(day){
       <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="bkPrim"> Primeiro atendimento</label>
       <label ${lab}>Observação<textarea class="field" id="bkObs" rows="2" maxlength="1000"></textarea></label>
       <p class="sub" id="bkErr" style="color:var(--bad,#e5484d)"></p>
-      <div class="btns"><button class="btn" id="bkGo">Criar no GestãoDS</button><button class="btn ghost" data-fechar>Fechar</button></div>
+      <div class="btns"><button class="btn" id="bkGo">Criar no GestãoDS</button><button class="btn ghost" id="bkSoCad" hidden>Só cadastrar</button><button class="btn ghost" data-fechar>Fechar</button></div>
       <div class="btns" style="margin-top:4px">${webBtn}<button class="btn ghost" id="bkTroca">Trocar token</button></div>`);
     const tipo=$('#bkTipo'),servL=$('#bkServL');
-    const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value)};tipo.onchange=syncTipo;syncTipo();
+    const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value);if(servL.hidden)$('#bkServ').value=''};tipo.onchange=syncTipo;syncTipo();
     let pat=null;
     $('#bkNome').oninput=()=>{const l=D.patients.filter(p=>norm(p.name)===norm($('#bkNome').value));pat=l.length===1?l[0]:null;$('#bkFone').textContent=pat?(pat.phone?'Celular no cadastro: '+pat.phone:'Sem celular no cadastro: digite o CPF.'):''};
     $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
+    const novo=$('#bkNovo');novo.onchange=()=>{$('#bkNovoF').hidden=!novo.checked;$('#bkSoCad').hidden=!novo.checked;$('#bkCpf').placeholder=novo.checked?'Obrigatório para cadastrar':'Em branco: eu busco pelo celular do cadastro';if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
+    // Cadastro no GestãoDS: POST paciente/cadastrar/ (nome_completo, cpf e email obrigatórios; doc openapi consultada em 25/11/2026)
+    async function cadastrar(){
+      const er=$('#bkErr'),nome=$('#bkNome').value.trim(),cpf=$('#bkCpf').value.replace(/\D/g,''),email=$('#bkEmail').value.trim(),cel=$('#bkCel').value.replace(/\D/g,''),nasc=$('#bkNasc').value,sexo=$('#bkSexo').value;
+      if(nome.length<3){er.textContent='Informe o nome completo.';return null}
+      if(cpf.length!==11){er.textContent='Para cadastrar, o CPF precisa ter 11 dígitos.';return null}
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){er.textContent='O GestãoDS exige e-mail para cadastrar.';return null}
+      if(cel&&(cel.length<8||cel.length>15)){er.textContent='Celular inválido.';return null}
+      const body={nome_completo:nome,cpf,email};if(cel)body.celular=cel;if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
+      const r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
+      if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
+      if(r.http<200||r.http>=300){er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+gdsMsg(r.body)+' Se a pessoa já tiver cadastro, desmarque "Paciente novo" e agende pelo CPF.';return null}
+      novo.checked=false;novo.onchange();toast('Paciente cadastrado no GestãoDS');return cpf;
+    }
+    $('#bkSoCad').onclick=async()=>{const b=$('#bkSoCad');$('#bkErr').textContent='';b.disabled=true;b.textContent='Cadastrando…';try{if(await cadastrar()){$('#bkErr').textContent='';$('#bkFone').textContent='Cadastrado. Agora é só conferir o horário e criar o agendamento.'}}catch(e){$('#bkErr').textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Só cadastrar'}}};
     $('#bkGo').onclick=async()=>{
       const b=$('#bkGo'),er=$('#bkErr');er.textContent='';
       const nome=$('#bkNome').value.trim(),med=$('#bkMed').value,kind=tipo.value,sid=$('#bkServ').value,dt=$('#bkData').value,hr=$('#bkHora').value;
@@ -546,6 +568,7 @@ async function openBooking(day){
       if(isNaN(ini)){er.textContent='Data ou hora inválida.';return}
       b.disabled=true;b.textContent='Conferindo…';
       try{
+        if(novo.checked){b.textContent='Cadastrando paciente…';const c=await cadastrar();if(!c)return;cpf=c}
         if(!cpf){
           const cel=String(pat?.phone||'').replace(/\D/g,'');
           if(cel.length<8){er.textContent='Sem CPF e sem celular no cadastro. Digite o CPF.';return}
@@ -559,11 +582,11 @@ async function openBooking(day){
         if(!confirm(`Criar ${GDS_TIPOS.find(t=>t[0]===kind)[1].toLowerCase()} de ${nome}\n${quando} (${$('#bkDur').selectedOptions[0].textContent})\ndireto no GestãoDS?`))return;
         b.textContent='Criando no GestãoDS…';
         const payload={cpf,medico_id:+med,tipo_agendamento:kind,data_agendamento:apiDT(ini),data_fim_agendamento:apiDT(fim),primeiro_atendimento:$('#bkPrim').checked};
-        const obs=$('#bkObs').value.trim();if(obs)payload.obs=obs;if(sid)payload.tipos_servicos_ids=[+sid];
+        const obs=$('#bkObs').value.trim();if(obs)payload.obs=obs;if(sid&&GDS_SERV.has(kind))payload.tipos_servicos_ids=[+sid];
         const r=await gdsCall('agendamento/agendamento-livre/',tk,payload,'POST');
         if(r.http===401){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo e tente de novo.')}
         if(r.http<200||r.http>=300){er.textContent='O GestãoDS não criou ('+r.http+'). '+gdsMsg(r.body)+' O preenchimento foi mantido.';return}
-        const servNome=sid?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
+        const servNome=sid&&GDS_SERV.has(kind)?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
         D.agenda.push({src:'gds',ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
         close();toast('Agendamento criado no GestãoDS');if(curTab==='agenda')vAgenda();
       }catch(e){er.textContent=e.message+(e.blocked?' Use “Abrir o GestãoDS” para marcar por lá.':'')}
