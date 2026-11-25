@@ -334,7 +334,7 @@ function build(raw){
   const match=name=>{const l=byName.get(norm(name));return l&&l.length===1?l[0]:null};
   const ag=raw.agenda||{};
   const agenda=[];
-  for(const a of (ag.gestaods?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=a.cancelado?'cancelado':a.faltou?'faltou':a.finalizado?'finalizado':a.confirmado?'confirmado':'agendado';agenda.push({src:'gds',ini,fim:parseDate(a.fim),title:a.paciente,service:a.servico,status:st,off:!!a.cancelado,p:match(a.paciente)})}
+  for(const a of (ag.gestaods?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=a.cancelado?'cancelado':a.faltou?'faltou':a.finalizado?'finalizado':a.confirmado?'confirmado':'agendado';agenda.push({src:'gds',hash:a.hash||'',ini,fim:parseDate(a.fim),title:a.paciente,service:a.servico,status:st,off:!!a.cancelado,p:match(a.paciente)})}
   for(const a of (SEGUNDO_PRONTUARIO?ag.lequartier?.itens||[]:[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=String(a.status||'');agenda.push({src:'lq',ini,title:a.paciente,service:a.servico,status:st.toLowerCase(),off:/cancel/i.test(st),p:match(a.paciente)})}
   for(const a of (ag.google?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;agenda.push({src:'ggl',ini,fim:parseDate(a.fim),title:a.paciente,service:a.local||'',status:a.status||'',off:a.status==='cancelado',allDay:/ 00:00:00$/.test(a.inicio)&&/ 23:59:59$/.test(a.fim||''),p:null})}
   agenda.sort((a,b)=>a.ini-b.ini);
@@ -353,7 +353,7 @@ const FONTE=SEGUNDO_PRONTUARIO?{gds:'GestãoDS',lq:'Le Quartier',ggl:'Google'}:{
    ===================================================================== */
 function evCard(e,showDay){
   const who=e.p?e.p.name:e.title;const det=[e.service,e.status].filter(Boolean).join(' · ');
-  return `<button class="card${e.off?' off':''}" ${e.p?`data-pac="${esc(e.p.id)}"`:''}>
+  return `<button class="card${e.off?' off':''}" ${e.src==='gds'&&e.hash?`data-ag="${esc(e.hash)}"`:''} ${e.p?`data-pac="${esc(e.p.id)}"`:''}>
     <span class="src" style="background:var(--${e.src})"></span>
     <span class="time">${showDay?fmtD(e.ini)+'<br>':''}${e.allDay?'dia':fmtH(e.ini)}</span>
     <span class="grow"><span class="t">${esc(who)}</span><span class="m">${esc(det||FONTE[e.src])}</span></span>
@@ -362,8 +362,65 @@ function evCard(e,showDay){
 function patCard(p,extra){
   return `<button class="card" data-pac="${esc(p.id)}"><span class="avatar">${esc(initials(p.name))}</span><span class="grow"><span class="t">${esc(p.name)}</span><span class="m">${extra??esc([p.city&&p.city!=='A classificar'?p.city:'Praça a classificar',p.stage].filter(Boolean).join(' · '))}</span><br>${starsHTML(p.stars)}</span>${recPill(p)}</button>`;
 }
-function bindCards(root){root.querySelectorAll('[data-pac]').forEach(b=>b.addEventListener('click',()=>openPatient(b.dataset.pac)))}
+function bindCards(root){root.querySelectorAll('[data-ag]').forEach(b=>b.addEventListener('click',()=>openAppt(b.dataset.ag)));root.querySelectorAll('[data-pac]:not([data-ag])').forEach(b=>b.addEventListener('click',()=>openPatient(b.dataset.pac)))}
 function waLink(phone){const d=String(phone||'').replace(/\D/g,'');if(d.length<10)return null;return 'https://wa.me/'+(d.length<=11?'55'+d:d)}
+
+/* Agendamento do GestãoDS: abrir, reagendar, cancelar, confirmar (PUT agendamento/reagendar e mudar-status; doc openapi lida em 25/11/2026) */
+async function gMirrorMove(nome,velho,ini,fim){
+  if(!await gToken())return 'off';
+  try{const q=new URLSearchParams({timeMin:new Date(velho.getTime()-6e4).toISOString(),timeMax:new Date(velho.getTime()+6e4).toISOString(),singleEvents:'true',q:nome});
+    const j=await gFetch(`calendars/${encodeURIComponent(G_CAL)}/events?`+q.toString());const ev=(j.items||[]).find(x=>(x.summary||'').startsWith(nome));if(!ev)return 'sem';
+    if(!ini){await gFetch(`calendars/${encodeURIComponent(G_CAL)}/events/${ev.id}`,{method:'DELETE'});if(GLIVE)GLIVE.itens=GLIVE.itens.filter(x=>x.id!==ev.id)}
+    else await gFetch(`calendars/${encodeURIComponent(G_CAL)}/events/${ev.id}`,{method:'PATCH',body:JSON.stringify({start:{dateTime:ini.toISOString(),timeZone:'America/Sao_Paulo'},end:{dateTime:fim.toISOString(),timeZone:'America/Sao_Paulo'}})});
+    return 'ok'}catch(e){return 'erro'}
+}
+async function openAppt(hash){
+  const e=D.agenda.find(x=>x.src==='gds'&&x.hash===hash);if(!e)return;
+  const sheet=$('#sheet'),bg=$('#sheetBg');
+  const close=()=>{bg.classList.remove('on');sheet.classList.remove('on');setTimeout(()=>{bg.hidden=true;sheet.hidden=true},250)};
+  const lab='style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px"';
+  const nome=e.p?e.p.name:e.title,dur=e.fim?Math.max(5,Math.round((e.fim-e.ini)/6e4)):60;
+  const quando=e.ini.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'})+' às '+fmtH(e.ini);
+  const durOpts=[...new Set([15,30,45,60,90,120,180,dur])].sort((a,b)=>a-b).map(m=>`<option value="${m}"${m===dur?' selected':''}>${m<60?m+' min':Math.floor(m/60)+' h'+(m%60?' '+m%60+' min':'')}</option>`).join('');
+  sheet.innerHTML=`<div class="grab"></div>
+    <h1 style="font-size:22px;margin:0">${esc(nome)}</h1>
+    <p class="sub">${esc(quando)} · ${dur} min${e.service?' · '+esc(e.service):''} · <b>${esc(e.status)}</b></p>
+    <div class="btns">${e.p?'<button class="btn ghost" id="agPac">Ver paciente</button>':''}${!e.off&&e.status!=='confirmado'?'<button class="btn ghost" id="agConf">Marcar confirmado</button>':''}</div>
+    ${e.off?'<p class="sub">Este agendamento está cancelado.</p>':`
+    <h2 style="margin-top:18px">Reagendar</h2>
+    <div class="row" style="gap:8px"><label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Data<input class="field" id="agData" type="date" value="${isoDay(e.ini)}"></label>
+    <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Hora<input class="field" id="agHora" type="time" step="300" value="${pad2(e.ini.getHours())}:${pad2(e.ini.getMinutes())}"></label></div>
+    <label ${lab}>Duração<select class="field" id="agDur">${durOpts}</select></label>
+    <div class="btns"><button class="btn" id="agMove">Reagendar</button></div>
+    <h2 style="margin-top:18px">Cancelar</h2>
+    <label ${lab}>Motivo (opcional)<input class="field" id="agMot" maxlength="250" autocomplete="off"></label>
+    <div class="btns"><button class="btn ghost" id="agCanc" style="color:var(--bad,#e5484d);border-color:var(--bad,#e5484d)">Cancelar agendamento</button></div>`}
+    <p class="sub" id="agErr" style="color:var(--bad,#e5484d)"></p>
+    <p class="sub">O Órbita não manda mensagem ao paciente; avise você.</p>
+    <div class="btns"><button class="btn ghost" data-fechar>Fechar</button></div>`;
+  bg.hidden=false;sheet.hidden=false;requestAnimationFrame(()=>{bg.classList.add('on');sheet.classList.add('on')});sheet.scrollTop=0;bg.onclick=close;sheet.querySelectorAll('[data-fechar]').forEach(b=>b.onclick=close);
+  const er=$('#agErr');if($('#agPac'))$('#agPac').onclick=()=>openPatient(e.p.id);
+  const depois=async(msg)=>{D.agenda.sort((a,c)=>a.ini-c.ini);if(LIVE){LIVE.itens=(LIVE.itens||[]).map(i=>i.hash===hash?{...i,inicio:apiDT(e.ini),fim:e.fim?apiDT(e.fim):i.fim,cancelado:e.off,confirmado:e.status==='confirmado'}:i);await idb.set('gds_live',LIVE)}close();toast(msg);if(curTab==='agenda')vAgenda();else if(typeof render==='function'&&baseRaw)render(baseRaw)};
+  async function chamar(path,body,btn,txt){
+    const tk=await idb.get('gds_token');if(!tk){er.textContent='Conecte o GestãoDS em + Novo primeiro.';return null}
+    const old=btn.textContent;btn.disabled=true;btn.textContent=txt;
+    try{const r=await gdsCall(path,tk,body,'PUT');if(r.http===401){await idb.set('gds_token',null);er.textContent='O token do GestãoDS expirou. Toque em + Novo para conectar de novo.';return null}
+      if(r.http<200||r.http>=300){er.textContent='O GestãoDS recusou ('+r.http+'). '+gdsMsg(r.body);return null}return r}
+    catch(x){er.textContent=x.message;return null}finally{if(btn.isConnected){btn.disabled=false;btn.textContent=old}}
+  }
+  if($('#agConf'))$('#agConf').onclick=async()=>{const r=await chamar('agendamento/mudar-status/',{agendamento:hash,confirmado:true},$('#agConf'),'Confirmando…');if(r){e.status='confirmado';depois('Marcado como confirmado no GestãoDS')}};
+  if($('#agMove'))$('#agMove').onclick=async()=>{
+    er.textContent='';const ini=new Date($('#agData').value+'T'+$('#agHora').value+':00');if(isNaN(ini)){er.textContent='Data ou hora inválida.';return}
+    const fim=new Date(ini.getTime()+(+$('#agDur').value)*6e4);
+    const novo=ini.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})+' às '+$('#agHora').value;
+    if(!confirm(`Reagendar ${nome}\nde ${quando}\npara ${novo} (${$('#agDur').selectedOptions[0].textContent})\ndireto no GestãoDS?`))return;
+    const r=await chamar('agendamento/reagendar/',{agendamento:hash,data_agendamento:apiDT(ini),data_fim_agendamento:apiDT(fim)},$('#agMove'),'Reagendando…');if(!r)return;
+    const velho=e.ini;e.ini=ini;e.fim=fim;const gm=await gMirrorMove(nome,velho,ini,fim);depois('Reagendado no GestãoDS'+(gm==='ok'?' e no Google Agenda':gm==='erro'?' (Google Agenda falhou)':''))};
+  if($('#agCanc'))$('#agCanc').onclick=async()=>{
+    er.textContent='';if(!confirm(`Cancelar o agendamento de ${nome}\n${quando}\nno GestãoDS?`))return;
+    const mot=$('#agMot').value.trim();const r=await chamar('agendamento/mudar-status/',{agendamento:hash,cancelado:true,...(mot?{motivo_cancelamento:mot}:{})},$('#agCanc'),'Cancelando…');if(!r)return;
+    e.off=true;e.status='cancelado';const gm=await gMirrorMove(nome,e.ini,null,null);depois('Cancelado no GestãoDS'+(gm==='ok'?' e tirado do Google Agenda':''))};
+}
 function openPatient(id){
   const p=D.byId.get(id);if(!p)return;
   const sheet=$('#sheet'),bg=$('#sheetBg');
@@ -837,7 +894,7 @@ async function openBooking(day){
         if(r.http===401){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo e tente de novo.')}
         if(r.http<200||r.http>=300){er.textContent='O GestãoDS não criou ('+r.http+'). '+gdsMsg(r.body)+' O preenchimento foi mantido.';return}
         const servNome=sid&&GDS_SERV.has(kind)?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
-        D.agenda.push({src:'gds',ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
+        const hNovo=(r.body&&typeof r.body==='object')?String(gdsN(r.body.data&&typeof r.body.data==='object'?r.body.data:r.body,'hash','hash_agendamento','agendamento','token')||''):'';D.agenda.push({src:'gds',hash:hNovo,ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
         await guardaCpf(pat||{name:nome},cpf);await addExtra(nome,pat?.phone||$('#bkCel').value);
         const gm=await gMirrorAppt(nome,ini,fim);
         close();toast('Agendamento criado no GestãoDS'+(gm==='ok'?' e no Google Agenda':gm==='erro'?' (Google Agenda falhou)':''));if(curTab==='agenda')vAgenda();
