@@ -530,7 +530,7 @@ async function openBooking(day){
       <p class="sub">Vai direto para o GestãoDS. Confira antes de criar.</p>
       <label ${lab}>Paciente<input class="field" id="bkNome" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Comece a digitar o nome"></label>
       <div id="bkSug" class="list" style="margin-top:6px" hidden></div>
-      <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="bkNovo"> Paciente novo: cadastrar no GestãoDS</label>
+      <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="bkNovo"> Paciente sem cadastro: cadastrar e agendar</label>
       <label ${lab} id="bkCpfL" hidden>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Só os números"></label>
       <p class="sub" id="bkFone" style="margin:4px 0 0"></p>
       <div id="bkNovoF" hidden>
@@ -548,7 +548,7 @@ async function openBooking(day){
       <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="bkPrim"> Primeiro atendimento</label>
       <label ${lab}>Observação<textarea class="field" id="bkObs" rows="2" maxlength="1000"></textarea></label>
       <p class="sub" id="bkErr" style="color:var(--bad,#e5484d)"></p>
-      <div class="btns"><button class="btn" id="bkGo">Criar no GestãoDS</button><button class="btn ghost" id="bkSoCad" hidden>Só cadastrar</button><button class="btn ghost" data-fechar>Fechar</button></div>
+      <div class="btns"><button class="btn" id="bkGo">Agendar</button><button class="btn ghost" id="bkSoCad" hidden>Só cadastrar</button><button class="btn ghost" data-fechar>Fechar</button></div>
       <div class="btns" style="margin-top:4px">${webBtn}<button class="btn ghost" id="bkTroca">Trocar token</button></div>`);
     const tipo=$('#bkTipo'),servL=$('#bkServL');
     const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value);if(servL.hidden)$('#bkServ').value=''};tipo.onchange=syncTipo;syncTipo();
@@ -558,14 +558,14 @@ async function openBooking(day){
     const cpfL=$('#bkCpfL'),cpfIn=$('#bkCpf'),fone=$('#bkFone');
     let found=null; // CPF achado sem digitar
     const needCpf=(show,msg)=>{cpfL.hidden=!show;if(msg!==undefined)fone.textContent=msg};
-    const showFone=()=>{found=null;if($('#bkNovo').checked){needCpf(true,'');return}if(!pat){needCpf(!!nomeIn.value.trim(),nomeIn.value.trim()?'Paciente fora da base: digite o CPF ou marque "Paciente novo".':'');return}needCpf(false,'Localizando o CPF no GestãoDS…');resolve(pat)};
+    const showFone=()=>{found=null;if($('#bkNovo').checked){needCpf(true,'');return}if(!pat){needCpf(false,'');return}needCpf(false,'Localizando o CPF no GestãoDS…');resolve(pat)};
     async function resolve(p){
       const r=await cpfDoPaciente(p,tk);if(pat!==p)return;
       if(r.cpf){found=r.cpf;needCpf(false,'CPF localizado ✓'+(r.via?' ('+r.via+')':''))}
       else if(r.auth){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.')}
-      else needCpf(true,r.msg||'Não achei o CPF pelo celular. Digite uma vez que eu guardo neste iPhone.');
+      else setNovo(true,'O GestãoDS não achou esse paciente pelo celular. Parece não ter cadastro: preencha CPF e e-mail que eu cadastro e agendo junto. Se já tiver cadastro, digite só o CPF que dá certo do mesmo jeito.');
     }
-    const pick=p=>{pat=p;nomeIn.value=p.name;sug.hidden=true;sug.innerHTML='';showFone();if($('#bkNovo').checked&&p.phone&&!$('#bkCel').value)$('#bkCel').value=p.phone};
+    const pick=p=>{pat=p;nomeIn.value=p.name;sug.hidden=true;sug.innerHTML='';if(novo.checked)setNovo(false);showFone();if($('#bkNovo').checked&&p.phone&&!$('#bkCel').value)$('#bkCel').value=p.phone};
     nomeIn.oninput=()=>{
       const q=norm(nomeIn.value),parts=q.split(' ').filter(Boolean);
       const exact=D.patients.filter(p=>norm(p.name)===q);pat=exact.length===1?exact[0]:null;showFone();
@@ -576,10 +576,11 @@ async function openBooking(day){
       sug.querySelectorAll('[data-i]').forEach(b=>{b.onpointerdown=e=>e.preventDefault();b.onclick=()=>pick(hits[+b.dataset.i])});
       sug.hidden=false;
     };
-    nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true},150);
+    nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true;if(!pat&&nomeIn.value.trim().length>=3&&!novo.checked)setNovo(true,'Não está na sua base. Preencha CPF e e-mail que eu cadastro e agendo junto.')},150);
     nomeIn.onfocus=()=>{if(nomeIn.value.trim().length>=2&&!pat)nomeIn.oninput()};
     $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
-    const novo=$('#bkNovo');novo.onchange=()=>{$('#bkNovoF').hidden=!novo.checked;$('#bkSoCad').hidden=!novo.checked;showFone();if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
+    const novo=$('#bkNovo');const setNovo=(on,msg)=>{novo.checked=on;$('#bkPrim').checked=on;$('#bkNovoF').hidden=!on;$('#bkSoCad').hidden=!on;$('#bkGo').textContent=on?'Cadastrar e agendar':'Agendar';if(on){cpfL.hidden=false;if(pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone}if(msg!==undefined)fone.textContent=msg};
+    novo.onchange=()=>{setNovo(novo.checked);showFone();if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
     // Cadastro no GestãoDS: POST paciente/cadastrar/ (nome_completo, cpf e email obrigatórios; doc openapi consultada em 25/11/2026)
     async function cadastrar(){
       const er=$('#bkErr'),nome=$('#bkNome').value.trim(),cpf=$('#bkCpf').value.replace(/\D/g,''),email=$('#bkEmail').value.trim(),cel=$('#bkCel').value.replace(/\D/g,''),nasc=$('#bkNasc').value,sexo=$('#bkSexo').value;
@@ -590,8 +591,8 @@ async function openBooking(day){
       const body={nome_completo:nome,cpf,email};if(cel)body.celular=cel;if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
       const r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
       if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
-      if(r.http<200||r.http>=300){er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+gdsMsg(r.body)+' Se a pessoa já tiver cadastro, desmarque "Paciente novo" e agende pelo CPF.';return null}
-      await guardaCpf(pat||{name:nome},cpf);found=cpf;novo.checked=false;$('#bkNovoF').hidden=true;$('#bkSoCad').hidden=true;needCpf(false,'Cadastrado ✓');toast('Paciente cadastrado no GestãoDS');return cpf;
+      if(r.http<200||r.http>=300){const m=gdsMsg(r.body);if(/j[aá]\s+(est[aá]\s+)?cadastrad|j[aá]\s+existe|already/i.test(m)){await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Já tinha cadastro no GestãoDS ✓');return cpf}er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+m;return null}
+      await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Cadastrado ✓');cpfL.hidden=true;toast('Paciente cadastrado no GestãoDS');return cpf;
     }
     $('#bkSoCad').onclick=async()=>{const b=$('#bkSoCad');$('#bkErr').textContent='';b.disabled=true;b.textContent='Cadastrando…';try{if(await cadastrar()){$('#bkErr').textContent='';$('#bkFone').textContent='Cadastrado. Agora é só conferir o horário e criar o agendamento.'}}catch(e){$('#bkErr').textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Só cadastrar'}}};
     $('#bkGo').onclick=async()=>{
@@ -607,7 +608,7 @@ async function openBooking(day){
       if(isNaN(ini)){er.textContent='Data ou hora inválida.';return}
       b.disabled=true;b.textContent='Conferindo…';
       try{
-        if(novo.checked){b.textContent='Cadastrando paciente…';const c=await cadastrar();if(!c)return;cpf=c}
+        if(novo.checked){b.textContent='Cadastrando…';const c=await cadastrar();if(!c)return;cpf=c}
         if(!cpf&&pat){const r=await cpfDoPaciente(pat,tk);if(r.auth){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}cpf=r.cpf||''}
         if(!cpf){needCpf(true,'Não achei o CPF. Digite uma vez que eu guardo neste iPhone.');er.textContent='Falta o CPF.';cpfIn.focus();return}
         const quando=ini.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})+' às '+hr;
@@ -623,7 +624,7 @@ async function openBooking(day){
         await guardaCpf(pat||{name:nome},cpf);
         close();toast('Agendamento criado no GestãoDS');if(curTab==='agenda')vAgenda();
       }catch(e){er.textContent=e.message+(e.blocked?' Use “Abrir o GestãoDS” para marcar por lá.':'')}
-      finally{if(b.isConnected){b.disabled=false;b.textContent='Criar no GestãoDS'}}
+      finally{if(b.isConnected){b.disabled=false;b.textContent=novo.checked?'Cadastrar e agendar':'Agendar'}}
     };
   }
 }
