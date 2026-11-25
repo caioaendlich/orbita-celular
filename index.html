@@ -494,7 +494,10 @@ async function cpfDoPaciente(p,tk){
   }
   return{msg:'O GestãoDS não achou esse celular. Digite o CPF uma vez que eu guardo neste iPhone.'};
 }
+async function addExtra(name,phone){name=String(name||'').trim();if(name.length<3)return;const l=await idb.get('gds_extras')||[];const i=l.findIndex(e=>norm(e.name)===norm(name));const e={name,phone:phone||(i>=0?l[i].phone:'')};if(i>=0)l[i]=e;else l.push(e);await idb.set('gds_extras',l.slice(-500))}
 async function openBooking(day){
+  const extras=await idb.get('gds_extras')||[];
+  const BASE=[...D.patients,...extras.filter(e=>!D.patients.some(p=>norm(p.name)===norm(e.name))).map(e=>({id:null,name:e.name,phone:e.phone,city:'',extra:true}))];
   const sheet=$('#sheet'),bg=$('#sheetBg');
   const close=()=>{bg.classList.remove('on');sheet.classList.remove('on');setTimeout(()=>{bg.hidden=true;sheet.hidden=true},250)};
   const show=html=>{sheet.innerHTML='<div class="grab"></div>'+html;bg.hidden=false;sheet.hidden=false;requestAnimationFrame(()=>{bg.classList.add('on');sheet.classList.add('on')});sheet.scrollTop=0;bg.onclick=close;sheet.querySelectorAll('[data-fechar]').forEach(b=>b.onclick=close)};
@@ -568,15 +571,15 @@ async function openBooking(day){
     const pick=p=>{pat=p;nomeIn.value=p.name;sug.hidden=true;sug.innerHTML='';if(novo.checked)setNovo(false);showFone();if($('#bkNovo').checked&&p.phone&&!$('#bkCel').value)$('#bkCel').value=p.phone};
     nomeIn.oninput=()=>{
       const q=norm(nomeIn.value),parts=q.split(' ').filter(Boolean);
-      const exact=D.patients.filter(p=>norm(p.name)===q);pat=exact.length===1?exact[0]:null;showFone();
+      const exact=BASE.filter(p=>norm(p.name)===q);pat=exact.length===1?exact[0]:null;showFone();
       if(q.length<2){sug.hidden=true;sug.innerHTML='';return}
-      const hits=D.patients.filter(p=>p.name&&parts.every(t=>norm(p.name).includes(t))).sort((a,b)=>(norm(b.name).startsWith(q)-norm(a.name).startsWith(q))||a.name.localeCompare(b.name,'pt-BR')).slice(0,8);
+      const hits=BASE.filter(p=>p.name&&parts.every(t=>norm(p.name).includes(t))).sort((a,b)=>(norm(b.name).startsWith(q)-norm(a.name).startsWith(q))||a.name.localeCompare(b.name,'pt-BR')).slice(0,8);
       if(!hits.length||(hits.length===1&&pat===hits[0])){sug.hidden=true;sug.innerHTML='';return}
-      sug.innerHTML=hits.map((p,i)=>`<button type="button" class="card" data-i="${i}" style="display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:10px 14px"><span style="min-width:0">${esc(p.name)}</span><span class="sub" style="white-space:nowrap">${esc(p.phone||(p.city&&p.city!=='A classificar'?p.city:''))}</span></button>`).join('');
+      sug.innerHTML=hits.map((p,i)=>`<button type="button" class="card" data-i="${i}" style="display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:10px 14px"><span style="min-width:0">${esc(p.name)}</span><span class="sub" style="white-space:nowrap">${esc(p.phone||(p.city&&p.city!=='A classificar'?p.city:''))}${p.extra?' · novo':''}</span></button>`).join('');
       sug.querySelectorAll('[data-i]').forEach(b=>{b.onpointerdown=e=>e.preventDefault();b.onclick=()=>pick(hits[+b.dataset.i])});
       sug.hidden=false;
     };
-    nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true;if(!pat&&nomeIn.value.trim().length>=3&&!novo.checked)setNovo(true,'Não está na sua base. Preencha CPF e e-mail que eu cadastro e agendo junto.')},150);
+    nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true;if(!pat&&nomeIn.value.trim().length>=3&&!novo.checked)setNovo(true,'Não está na lista do Órbita. Se já cadastrou no GestãoDS, basta o celular: eu acho. Se é novo mesmo, preencha CPF e e-mail que eu cadastro e agendo junto.')},150);
     nomeIn.onfocus=()=>{if(nomeIn.value.trim().length>=2&&!pat)nomeIn.oninput()};
     $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
     const novo=$('#bkNovo');const setNovo=(on,msg)=>{novo.checked=on;$('#bkPrim').checked=on;$('#bkNovoF').hidden=!on;$('#bkSoCad').hidden=!on;$('#bkGo').textContent=on?'Cadastrar e agendar':'Agendar';if(on){cpfL.hidden=false;if(pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone}if(msg!==undefined)fone.textContent=msg};
@@ -592,7 +595,7 @@ async function openBooking(day){
       const r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
       if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
       if(r.http<200||r.http>=300){const m=gdsMsg(r.body);if(/j[aá]\s+(est[aá]\s+)?cadastrad|j[aá]\s+existe|already/i.test(m)){await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Já tinha cadastro no GestãoDS ✓');return cpf}er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+m;return null}
-      await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Cadastrado ✓');cpfL.hidden=true;toast('Paciente cadastrado no GestãoDS');return cpf;
+      await guardaCpf(pat||{name:nome},cpf);await addExtra(nome,cel);found=cpf;setNovo(false,'Cadastrado ✓');cpfL.hidden=true;toast('Paciente cadastrado no GestãoDS');return cpf;
     }
     $('#bkSoCad').onclick=async()=>{const b=$('#bkSoCad');$('#bkErr').textContent='';b.disabled=true;b.textContent='Cadastrando…';try{if(await cadastrar()){$('#bkErr').textContent='';$('#bkFone').textContent='Cadastrado. Agora é só conferir o horário e criar o agendamento.'}}catch(e){$('#bkErr').textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Só cadastrar'}}};
     $('#bkGo').onclick=async()=>{
@@ -608,6 +611,7 @@ async function openBooking(day){
       if(isNaN(ini)){er.textContent='Data ou hora inválida.';return}
       b.disabled=true;b.textContent='Conferindo…';
       try{
+        if(novo.checked&&!cpf){const cel=$('#bkCel').value.replace(/\D/g,'');if(cel.length>=8){b.textContent='Procurando no GestãoDS…';const r=await cpfDoPaciente({id:null,name:nome,phone:cel},tk);if(r.auth){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}if(r.cpf){cpf=r.cpf;found=r.cpf;setNovo(false,'Já tem cadastro no GestãoDS ✓ (achei pelo celular)');cpfL.hidden=true}}}
         if(novo.checked){b.textContent='Cadastrando…';const c=await cadastrar();if(!c)return;cpf=c}
         if(!cpf&&pat){const r=await cpfDoPaciente(pat,tk);if(r.auth){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}cpf=r.cpf||''}
         if(!cpf){needCpf(true,'Não achei o CPF. Digite uma vez que eu guardo neste iPhone.');er.textContent='Falta o CPF.';cpfIn.focus();return}
@@ -621,7 +625,7 @@ async function openBooking(day){
         if(r.http<200||r.http>=300){er.textContent='O GestãoDS não criou ('+r.http+'). '+gdsMsg(r.body)+' O preenchimento foi mantido.';return}
         const servNome=sid&&GDS_SERV.has(kind)?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
         D.agenda.push({src:'gds',ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
-        await guardaCpf(pat||{name:nome},cpf);
+        await guardaCpf(pat||{name:nome},cpf);await addExtra(nome,pat?.phone||$('#bkCel').value);
         close();toast('Agendamento criado no GestãoDS');if(curTab==='agenda')vAgenda();
       }catch(e){er.textContent=e.message+(e.blocked?' Use “Abrir o GestãoDS” para marcar por lá.':'')}
       finally{if(b.isConnected){b.disabled=false;b.textContent=novo.checked?'Cadastrar e agendar':'Agendar'}}
