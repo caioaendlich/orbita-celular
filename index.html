@@ -447,7 +447,7 @@ function vAgenda(){
     <div class="chips" style="margin-top:8px">${Object.entries(FONTE).map(([k,l])=>`<button class="chip" data-src="${k}" aria-pressed="${agSrc[k]}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--${k});margin-right:6px"></span>${l}</button>`).join('')}</div>
     <div class="sub" style="margin:8px 0 10px">${agMode==='dia'?sel.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})+' · '+list.filter(e=>!e.off).length+' compromissos':list.length+' compromissos a partir de hoje'}</div>
     <div class="list">${list.map(e=>evCard(e,agMode!=='dia')).join('')||'<div class="empty">Nada neste dia.</div>'}</div>
-    <p class="sub" style="margin-top:14px">“+ Novo” cria direto no GestãoDS. Confirmar e remarcar continuam no Mac. O resto é consulta do último retrato.</p>`;
+    <p class="sub" style="margin-top:14px">Agenda do GestãoDS ao vivo, sem depender do Mac. “+ Novo” cria direto lá.</p>`;
   const nb=view.querySelector('#novoAg');if(nb)nb.onclick=()=>openBooking(agMode==='dia'&&sel>=TODAY?sel:TODAY);
   view.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{agMode=b.dataset.mode;vAgenda()});
   view.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{agDay=+b.dataset.d;vAgenda()});
@@ -494,6 +494,60 @@ async function cpfDoPaciente(p,tk){
   }
   return{msg:'O GestãoDS não achou esse celular. Digite o CPF uma vez que eu guardo neste iPhone.'};
 }
+/* =====================================================================
+   Órbita do celular independente do Mac (pedido de Caio, 25/11/2026)
+   A agenda e a lista de pacientes vêm direto do GestãoDS (agendamento/listagem/),
+   sem depender do retrato. O retrato do Mac, se houver, só soma o que existe
+   apenas no Mac (estrelas, planos, pendências, notas, Google e Le Quartier).
+   CPFs ficam só neste iPhone (gds_cpfs) e não entram no que é exibido.
+   ===================================================================== */
+let LIVE=null,baseRaw=null,liveBusy=false;
+const gdsN=(o,...ks)=>{for(const k of ks){if(o&&o[k]!=null&&o[k]!=='')return o[k]}return undefined};
+const ddmmyyyy=d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`;
+function normAppt(row){
+  const pt=row.paciente&&typeof row.paciente==='object'?row.paciente:{},md=row.medico&&typeof row.medico==='object'?row.medico:{};
+  const sv=gdsN(row,'servicos','tipo_servicos','tipos_servicos','tipo_servico');
+  let st=Array.isArray(sv)?sv.map(x=>x&&typeof x==='object'?(x.nome||x.descricao||''):String(x)).filter(Boolean).join(', '):sv&&typeof sv==='object'?(sv.nome||sv.descricao||''):String(sv||'');
+  if(!st)st=String(gdsN(row,'tipo_agendamento','tipo')||'Atendimento');
+  return{hash:String(gdsN(row,'hash_agendamento','hash','agendamento')||''),paciente:String(gdsN(pt,'nome','nome_completo')||gdsN(row,'paciente_nome')||'Paciente não identificado'),celular:String(pt.celular||''),cpf:pickCpf(pt)||pickCpf(row),inicio:String(gdsN(row,'data_agendamento','inicio')||''),fim:String(gdsN(row,'data_fim_agendamento','fim')||''),medico_id:gdsN(md,'id')??row.medico_id??null,servico:st,confirmado:!!row.confirmado,cancelado:!!row.cancelado,faltou:!!row.faltou,finalizado:!!row.finalizado};
+}
+async function gdsListagem(tk,a,b){
+  const rows=[];let page=1,pages=1;
+  do{const r=await gdsCall(`agendamento/listagem/?data_inicial=${encodeURIComponent(ddmmyyyy(a))}&data_final=${encodeURIComponent(ddmmyyyy(b))}&page=${page}`,tk);
+    if(r.http===401||r.http===403){const e=new Error('auth');e.auth=true;throw e}
+    if(r.http===400)return rows;if(r.http!==200)throw new Error('O GestãoDS respondeu '+r.http+' ao carregar a agenda.');
+    const bd=r.body||{};rows.push(...(bd.data||bd.agendamentos||[]));
+    if(page===1){pages=bd.total_pages>0?bd.total_pages:(bd.count&&bd.per_page?Math.ceil(bd.count/bd.per_page):1);pages=Math.min(pages,200)}
+    page++}while(page<=pages);
+  return rows;
+}
+async function syncLive(){
+  const tk=await idb.get('gds_token');if(!tk||liveBusy)return false;liveBusy=true;
+  try{
+    const old=await idb.get('gds_live')||{itens:[]},full=!old.full,today=startOf(new Date());
+    const start=full?new Date(2015,0,1):addDays(today,-60),end=addDays(today,400);
+    if(full)toast('Carregando a agenda do GestãoDS…');
+    const rows=[];for(let c=new Date(start);c<=end;){const we=new Date(Math.min(new Date(c.getFullYear(),11,31).getTime(),end.getTime()));rows.push(...await gdsListagem(tk,c,we));c=addDays(startOf(we),1)}
+    const inc=rows.filter(r=>r&&typeof r==='object').map(normAppt);
+    const kept=full?[]:old.itens.filter(i=>{const d=parseDate(i.inicio);return !d||d<start||d>end});
+    const itens=kept.concat(inc);
+    const m=await idb.get('gds_cpfs')||{};for(const i of itens)if(i.cpf&&i.cpf.length===11)m['n:'+norm(i.paciente)]=i.cpf;await idb.set('gds_cpfs',m);
+    LIVE={itens:itens.map(({cpf,...x})=>x),atualizado_em:new Date().toISOString(),full:true};await idb.set('gds_live',LIVE);
+    return true;
+  }catch(e){if(e.auth){await idb.set('gds_token',null);toast('O GestãoDS recusou o token. Conecte de novo pelo “+ Novo” da Agenda.')}else toast(e.message);return false}
+  finally{liveBusy=false}
+}
+async function liveTick(){if(await syncLive()&&baseRaw)render(baseRaw)}
+function emptyRaw(){return{schema:1,gerado_em:null,soGestao:true,agenda:{gestaods:{itens:[]},lequartier:{itens:[]},google:{itens:[],configurado:false}},operation:{patients:[],plans:[],plan_items:[],tasks:[],events:[],catalog:{}},campaigns:[]}}
+function mergeLive(raw){
+  if(!LIVE||!LIVE.itens||raw.demo)return raw;
+  const r={...raw,liveAt:LIVE.atualizado_em,agenda:{...(raw.agenda||{}),gestaods:{itens:LIVE.itens,atualizado_em:LIVE.atualizado_em}},operation:{...(raw.operation||{})}};
+  const pts=[...(r.operation.patients||[])],have=new Set(pts.map(p=>norm(p.name))),by=new Map(),now=new Date();
+  for(const a of LIVE.itens){const k=norm(a.paciente);if(!k||have.has(k)||/nao identificado/.test(k))continue;const d=parseDate(a.inicio);const o=by.get(k)||{name:a.paciente,phone:'',last:null,serv:new Set()};if(a.celular)o.phone=a.celular;if(d&&d<=now&&!a.cancelado&&!a.faltou&&(!o.last||d>o.last))o.last=d;if(a.servico)o.serv.add(a.servico);by.set(k,o)}
+  for(const[k,o]of by)pts.push({id:'gds:'+k,name:o.name,city:'A classificar',phone:o.phone,stars:null,last_visit:o.last?isoDay(o.last):null,last_visit_source:o.last?'Agenda do GestãoDS':null,procedures:[...o.serv].join(', '),notes:'',events:[],contacts:[],upcoming:[]});
+  r.operation.patients=pts;return r;
+}
+
 async function addExtra(name,phone){name=String(name||'').trim();if(name.length<3)return;const l=await idb.get('gds_extras')||[];const i=l.findIndex(e=>norm(e.name)===norm(name));const e={name,phone:phone||(i>=0?l[i].phone:'')};if(i>=0)l[i]=e;else l.push(e);await idb.set('gds_extras',l.slice(-500))}
 async function openBooking(day){
   const extras=await idb.get('gds_extras')||[];
@@ -521,7 +575,7 @@ async function openBooking(day){
         if(d.http!==200){er.textContent=d.http===401||d.http===403?'O GestãoDS recusou este token.':'O GestãoDS respondeu '+d.http+'. '+gdsMsg(d.body);return}
         let sv=[];try{const s=await gdsCall('core/servicos-clinica/',tk);if(s.http===200)sv=gdsList(s.body)}catch(e){}
         const md=gdsList(d.body);await idb.set('gds_token',tk);await idb.set('gds_medicos',md);await idb.set('gds_servicos',sv);
-        toast('GestãoDS conectado');form(tk,md,sv);
+        toast('GestãoDS conectado');form(tk,md,sv);liveTick();
       }catch(e){er.textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Conectar'}}
     };
   }
@@ -869,12 +923,13 @@ function go(tab){curTab=tab;document.querySelectorAll('nav.tabs [data-tab]').for
 document.querySelectorAll('nav.tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.tab==='mapa'&&curTab==='mapa'){gPath=[];gPage=0;gList=null}go(b.dataset.tab)}));
 function header(){
   const s=$('#snap');if(!D){s.innerHTML='';return}
-  const g=D.generated,age=g?(NOW-g)/36e5:null;
+  const g=D.generated,age=g?(NOW-g)/36e5:null,lv=D.raw.liveAt?parseDate(D.raw.liveAt):null;
+  if(lv&&!D.raw.demo){s.innerHTML=`GestãoDS ao vivo · <b>${fmtH(lv)}</b><br><span>${offline?'sem internet, última cópia':g?'notas do Mac de '+fmtD(g):'sem depender do Mac'}</span>`;$('#banner').innerHTML='';return}
   s.innerHTML=g?`Retrato de <b>${fmtD(g)} · ${fmtH(g)}</b><br><span class="${age>6?'old':''}">${offline?'sem internet, retrato salvo':D.raw.demo?'dados fictícios':age>6?'Mac sem enviar há '+Math.floor(age)+' h':'sincronizado pelo Mac'}</span>`:'';
   $('#banner').innerHTML=D.raw.demo?'<div class="note" role="note">Demonstração com dados fictícios. Nenhum paciente real aparece aqui.</div>':'';
 }
 let firstRender=true;
-function render(raw){NOW=new Date();TODAY=startOf(NOW);D=build(raw);$('#tabs').hidden=false;header();go(firstRender?'mapa':curTab);firstRender=false}
+function render(raw){baseRaw=raw;NOW=new Date();TODAY=startOf(NOW);D=build(mergeLive(raw));$('#tabs').hidden=false;header();go(firstRender?'mapa':curTab);firstRender=false}
 async function fetchRemote(token,etag){
   const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),20000);
   let r;try{r=await fetch(`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`,{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github.raw','X-GitHub-Api-Version':'2022-11-28',...(etag?{'If-None-Match':etag}:{})},cache:'no-store',signal:ctl.signal})}
@@ -910,9 +965,20 @@ function showSetup(msg){
     <label class="chk"><input type="checkbox" id="rm" checked> Lembrar a senha neste iPhone</label>
     <div class="err" id="er">${esc(msg||'')}</div>
     <button class="btn" id="go">Abrir o retrato</button>
-    <button class="btn ghost" id="demo">Ver com dados fictícios</button></div>`;
+    <button class="btn ghost" id="demo">Ver com dados fictícios</button>
+    <h2 style="margin-top:22px">Sem o Mac</h2><p class="sub">Agenda e pacientes direto do GestãoDS. Funciona com o Mac desligado.</p>
+    <label>Token de API do GestãoDS<input class="field" id="gtk" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div class="err" id="ger"></div>
+    <button class="btn" id="ggo">Usar só com o GestãoDS</button></div>`;
   idb.get('token').then(t=>{if(t)$('#tk').value=t});
   $('#demo').onclick=()=>render(demoSnapshot());
+  $('#ggo').onclick=async()=>{const tk=$('#gtk').value.trim(),er=$('#ger'),b=$('#ggo');if(!tk){er.textContent='Cole o token.';return}
+    b.disabled=true;er.textContent='Conectando…';
+    try{const d=await gdsCall('core/medicos/',tk);if(d.http!==200){er.textContent=d.http===401||d.http===403?'O GestãoDS recusou este token.':'O GestãoDS respondeu '+d.http+'.';b.disabled=false;return}
+      let sv=[];try{const x=await gdsCall('core/servicos-clinica/',tk);if(x.http===200)sv=gdsList(x.body)}catch(e){}
+      await idb.set('gds_token',tk);await idb.set('gds_medicos',gdsList(d.body));await idb.set('gds_servicos',sv);
+      er.textContent='Carregando a agenda…';if(await syncLive())render(emptyRaw());else{er.textContent='Não consegui carregar a agenda.';b.disabled=false}
+    }catch(e){er.textContent=e.message;b.disabled=false}};
   $('#go').onclick=async()=>{
     const tk=$('#tk').value.trim(),pw=$('#pw').value;const er=$('#er'),b=$('#go');
     if(!tk||!pw){er.textContent='Preencha a chave e a senha.';return}
@@ -929,10 +995,12 @@ async function boot(){
   if('serviceWorker' in navigator){try{navigator.serviceWorker.register('sw.js')}catch(e){}}
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
   const blob=await idb.get('blob'),pass=await idb.get('pass');const ck=await idb.get('checked');if(ck)lastCheck=new Date(ck);
-  if(blob&&pass){try{render(await decryptSnapshot(blob,pass))}catch(e){showSetup(e.message);return}refresh(false);return}
+  LIVE=await idb.get('gds_live')||null;const gtok=await idb.get('gds_token');
+  if(blob&&pass){try{render(await decryptSnapshot(blob,pass))}catch(e){showSetup(e.message);return}refresh(false);liveTick();setInterval(()=>{if(document.visibilityState==='visible')liveTick()},120000);return}
+  if(gtok||LIVE){render(emptyRaw());liveTick();setInterval(()=>{if(document.visibilityState==='visible')liveTick()},120000);return}
   showSetup();
 }
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&D&&!D.raw.demo){refresh(false)}else if(document.visibilityState==='visible'&&D){NOW=new Date();TODAY=startOf(NOW);header()}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&D&&!D.raw.demo){if(!D.raw.soGestao)refresh(false);liveTick()}else if(document.visibilityState==='visible'&&D){NOW=new Date();TODAY=startOf(NOW);header()}});
 boot();
 })();
 </script>
