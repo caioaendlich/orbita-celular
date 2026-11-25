@@ -1,6 +1,6 @@
 // Órbita Celular: guarda a casca do app para abrir sem internet. Os dados ficam no IndexedDB, cifrados.
 // v2: rede com limite de 2,5 s. Com internet fraca abre na hora pela cópia salva e atualiza por trás.
-const SHELL='orbita-shell-v14';
+const SHELL='orbita-shell-v15';
 const FILES=['./','index.html','manifest.webmanifest','icon-180.png','icon-512.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(SHELL).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==SHELL&&x!=='orbita-fonts').map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});

@@ -475,7 +475,9 @@ async function gdsCall(path,token,body,method){
 }
 function gdsList(b){if(Array.isArray(b))return b;if(b&&Array.isArray(b.data))return b.data;const o=b&&typeof b==='object'?(b.data&&typeof b.data==='object'?b.data:b):{};return Object.entries(o).flatMap(([cat,it])=>Array.isArray(it)?it.filter(x=>x&&typeof x==='object').map(x=>({...x,categoria:cat})):[])}
 const gdsLabel=o=>o.nome||o.nome_completo||o.descricao||o.label||('ID '+o.id);
-function gdsMsg(b){if(!b)return'';if(typeof b==='string')return b;const m=b.mensagem||b.message||b.detail||b.erro||b.error||b.errors;return(typeof m==='string'?m:JSON.stringify(m||b)).slice(0,300)}
+const GDS_CAMPO={nome_completo:'Nome',cpf:'CPF',email:'E-mail',celular:'Celular',telefone:'Telefone',nascimento:'Nascimento',sexo:'Sexo',rg:'RG',cep:'CEP',endereco:'Endereço',numero:'Número',bairro:'Bairro',cidade:'Cidade',uf:'UF',estado_civil:'Estado civil',nome_completo_mae:'Nome da mãe'};
+function gdsErros(b){const e=b&&typeof b==='object'&&b.errors;if(!e||typeof e!=='object')return[];return Object.entries(e).map(([k,v])=>({campo:k,nome:GDS_CAMPO[k]||k,msg:(Array.isArray(v)?v.join(' '):typeof v==='string'?v:JSON.stringify(v))}))}
+function gdsMsg(b){if(!b)return'';if(typeof b==='string')return b;const m=b.mensagem||b.message||b.detail||b.erro||b.error;let t=typeof m==='string'?m:(m?JSON.stringify(m):'');const er=gdsErros(b);if(er.length)t=(t?t.replace(/\s*Verifique os campos preenchidos\.?/i,'').replace(/[.!]+$/,'')+'. ':'')+er.map(x=>x.nome+': '+x.msg).join(' · ');return(t||JSON.stringify(b)).slice(0,400)}
 // Leitura de dados livres para cadastro (colados ou ditados). Nada sai do iPhone por aqui.
 function cpfValido(c){if(!/^\d{11}$/.test(c)||/^(\d)\1{10}$/.test(c))return false;for(const t of[9,10]){let s=0;for(let i=0;i<t;i++)s+=+c[i]*(t+1-i);if((s*10)%11%10!==+c[t])return false}return true}
 function nomeBonito(n){n=n.replace(/\s+/g,' ').trim();if(n!==n.toLowerCase()&&n!==n.toUpperCase())return n;return n.toLowerCase().split(' ').map((w,i)=>i&&/^(d[aeo]s?|e)$/.test(w)?w:w.charAt(0).toUpperCase()+w.slice(1)).join(' ')}
@@ -794,10 +796,15 @@ async function openBooking(day){
       if(cpf.length!==11){er.textContent='Para cadastrar, o CPF precisa ter 11 dígitos.';return null}
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){er.textContent='O GestãoDS exige e-mail para cadastrar.';return null}
       if(cel&&(cel.length<8||cel.length>15)){er.textContent='Celular inválido.';return null}
-      const body={nome_completo:nome,cpf,email};if(cel)body.celular=cel;if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
-      const r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
+      const body={nome_completo:nome,cpf,email};if(cel)body.celular=cel;document.querySelectorAll('#bkNovoF [data-extra]').forEach(i=>{const v=i.value.trim();if(v)body[i.dataset.extra]=i.dataset.extra==='cep'?v.replace(/\D/g,''):v});if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
+      let r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
       if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
-      if(r.http<200||r.http>=300){const m=gdsMsg(r.body);if(/j[aá]\s+(est[aá]\s+)?cadastrad|j[aá]\s+existe|already/i.test(m)){await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Já tinha cadastro no GestãoDS ✓');return cpf}er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+m;return null}
+      // Se a agenda exigir campo extra que já temos (telefone = celular) ou outro formato de celular, tenta de novo uma vez sozinho.
+      if(r.http===400){const ks=gdsErros(r.body).map(x=>x.campo);let mudou=false;
+        if(cel&&ks.includes('telefone')&&!body.telefone){body.telefone=cel;mudou=true}
+        if(cel&&ks.includes('celular')&&/^\d{10,11}$/.test(cel)){body.celular=`(${cel.slice(0,2)}) ${cel.slice(2,-4)}-${cel.slice(-4)}`;mudou=true}
+        if(mudou)r=await gdsCall('paciente/cadastrar/',tk,body,'POST')}
+      if(r.http<200||r.http>=300){const m=gdsMsg(r.body);if(/j[aá]\s+(est[aá]\s+)?(cadastrad|registrad|em uso|utilizad)|j[aá]\s+existe|already|exists|duplicad/i.test(m)){await guardaCpf(pat||{name:nome},cpf);found=cpf;setNovo(false,'Já tinha cadastro no GestãoDS ✓');return cpf}const errs=gdsErros(r.body),falta=errs.filter(x=>/obrigat/i.test(x.msg)).map(x=>x.nome);const box=$('#bkNovoF');for(const x of errs){if(['nome_completo','cpf','email','celular','nascimento','sexo'].includes(x.campo)||box.querySelector(`[data-extra="${x.campo}"]`))continue;box.insertAdjacentHTML('beforeend',`<label ${lab}>${esc(x.nome)} (o GestãoDS pediu)<input class="field" data-extra="${esc(x.campo)}" autocomplete="off" value="${x.campo==='telefone'?esc(cel||''):''}"></label>`)}er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+m+(falta.length?' Preencha '+falta.join(', ')+' e toque de novo.':'');return null}
       await guardaCpf(pat||{name:nome},cpf);await addExtra(nome,cel);found=cpf;setNovo(false,'Cadastrado ✓');cpfL.hidden=true;toast('Paciente cadastrado no GestãoDS');return cpf;
     }
     $('#bkSoCad').onclick=async()=>{const b=$('#bkSoCad');$('#bkErr').textContent='';b.disabled=true;b.textContent='Cadastrando…';try{if(await cadastrar()){$('#bkErr').textContent='';$('#bkFone').textContent='Cadastrado. Agora é só conferir o horário e criar o agendamento.'}}catch(e){$('#bkErr').textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Só cadastrar'}}};
