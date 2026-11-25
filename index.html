@@ -179,6 +179,8 @@ details.more summary{cursor:pointer;color:var(--accent);font-weight:600;font-siz
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+// Segundo prontuário (Le Quartier/DataSigh) desligado em 25/11/2026, igual ao Mac; ligar aqui se entrar outro prontuário
+var SEGUNDO_PRONTUARIO=false;
 (function(){
 'use strict';
 /* =====================================================================
@@ -333,7 +335,7 @@ function build(raw){
   const ag=raw.agenda||{};
   const agenda=[];
   for(const a of (ag.gestaods?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=a.cancelado?'cancelado':a.faltou?'faltou':a.finalizado?'finalizado':a.confirmado?'confirmado':'agendado';agenda.push({src:'gds',ini,fim:parseDate(a.fim),title:a.paciente,service:a.servico,status:st,off:!!a.cancelado,p:match(a.paciente)})}
-  for(const a of (ag.lequartier?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=String(a.status||'');agenda.push({src:'lq',ini,title:a.paciente,service:a.servico,status:st.toLowerCase(),off:/cancel/i.test(st),p:match(a.paciente)})}
+  for(const a of (SEGUNDO_PRONTUARIO?ag.lequartier?.itens||[]:[])){const ini=parseDate(a.inicio);if(!ini)continue;const st=String(a.status||'');agenda.push({src:'lq',ini,title:a.paciente,service:a.servico,status:st.toLowerCase(),off:/cancel/i.test(st),p:match(a.paciente)})}
   for(const a of (ag.google?.itens||[])){const ini=parseDate(a.inicio);if(!ini)continue;agenda.push({src:'ggl',ini,fim:parseDate(a.fim),title:a.paciente,service:a.local||'',status:a.status||'',off:a.status==='cancelado',allDay:/ 00:00:00$/.test(a.inicio)&&/ 23:59:59$/.test(a.fim||''),p:null})}
   agenda.sort((a,b)=>a.ini-b.ini);
   const events=op.events||patients.flatMap(p=>p.events);
@@ -344,7 +346,7 @@ function build(raw){
 }
 const openItem=i=>!['realizado','cancelado'].includes(i.status)&&!['recusado','cancelado','concluido'].includes(i.plan_status);
 const openTask=t=>!['concluida','cancelada'].includes(t.status);
-const FONTE={gds:'GestãoDS',lq:'Le Quartier',ggl:'Google'};
+const FONTE=SEGUNDO_PRONTUARIO?{gds:'GestãoDS',lq:'Le Quartier',ggl:'Google'}:{gds:'GestãoDS',ggl:'Google'};
 
 /* =====================================================================
    Cartões e ficha
@@ -498,7 +500,7 @@ async function cpfDoPaciente(p,tk){
    Órbita do celular independente do Mac (pedido de Caio, 25/11/2026)
    A agenda e a lista de pacientes vêm direto do GestãoDS (agendamento/listagem/),
    sem depender do retrato. O retrato do Mac, se houver, só soma o que existe
-   apenas no Mac (estrelas, planos, pendências, notas, Google e Le Quartier).
+   apenas no Mac (estrelas, planos, pendências, notas e Google).
    CPFs ficam só neste iPhone (gds_cpfs) e não entram no que é exibido.
    ===================================================================== */
 /* =====================================================================
@@ -510,11 +512,15 @@ async function cpfDoPaciente(p,tk){
    que adota o evento existente em vez de duplicar.
    ===================================================================== */
 const G_SCOPE='https://www.googleapis.com/auth/calendar.events',G_API='https://www.googleapis.com/calendar/v3/',G_CAL='primary';
+// Caio 25/11 17:45: consultório (conta ADM, a do login) e pessoal (caioendlich@gmail.com, compartilhada com a ADM) no mesmo Órbita
+const G_CALS=[{id:'primary',nome:'Consultório'},{id:'caioendlich@gmail.com',nome:'Pessoal'}];
 let GLIVE=null;
+// ID do cliente "Aplicativo da Web" criado por Caio em 25/11/2026 17:39 no projeto Orbita Clinica (194091723726); ID de cliente não é segredo
+const G_CLIENT_PADRAO='194091723726-qbpdklasges4uep975f932d6l1d3sp18.apps.googleusercontent.com';
 const gRedirect=()=>location.origin+location.pathname.replace(/index\.html$/,''); // no ar: https://caioaendlich.github.io/orbita-celular/
 async function gToken(){const t=await idb.get('g_token');return t&&t.exp>Date.now()+60000?t.access_token:null}
 async function gConnect(){
-  const cid=await idb.get('g_client');if(!cid)return false;
+  const cid=((await idb.get('g_client'))||G_CLIENT_PADRAO);if(!cid)return false;
   const st=Math.random().toString(36).slice(2);await idb.set('g_state',st);
   const q=new URLSearchParams({client_id:cid,redirect_uri:gRedirect(),response_type:'token',scope:G_SCOPE,include_granted_scopes:'true',state:st,login_hint:'caioendlichadm@gmail.com'});
   location.href='https://accounts.google.com/o/oauth2/v2/auth?'+q.toString();return true;
@@ -541,18 +547,21 @@ function gItem(ev){
   const allDay=!!(ev.start&&ev.start.date);
   const ini=allDay?ev.start.date+' 00:00:00':gStamp(new Date(ev.start.dateTime));
   let fim='';if(allDay){const e=new Date(ev.end.date+'T00:00:00');fim=isoDay(addDays(e,-1))+' 23:59:59'}else if(ev.end&&ev.end.dateTime)fim=gStamp(new Date(ev.end.dateTime));
-  return{id:ev.id,paciente:ev.summary||'(sem título)',inicio:ini,fim,local:ev.location||'',status:ev.status==='cancelled'?'cancelado':'confirmado'};
+  return{id:ev.id,agenda:ev._agenda||'Consultório',paciente:(ev._agenda==='Pessoal'?'· ':'')+(ev.summary||'(sem título)'),inicio:ini,fim,local:ev.location||'',status:ev.status==='cancelled'?'cancelado':'confirmado'};
 }
 async function gSync(){
   if(!await gToken())return false;
   try{
     const a=addDays(startOf(new Date()),-30),b=addDays(startOf(new Date()),180);let items=[],page='';
-    do{const q=new URLSearchParams({timeMin:a.toISOString(),timeMax:b.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'2500'});if(page)q.set('pageToken',page);
-      const j=await gFetch(`calendars/${encodeURIComponent(G_CAL)}/events?`+q.toString());items.push(...(j.items||[]));page=j.nextPageToken||''}while(page);
-    GLIVE={itens:items.filter(e=>e.status!=='cancelled'&&e.start).map(gItem),atualizado_em:new Date().toISOString()};await idb.set('g_live',GLIVE);return true;
+    const faltando=[];
+    for(const cal of G_CALS){page='';try{
+      do{const q=new URLSearchParams({timeMin:a.toISOString(),timeMax:b.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'2500'});if(page)q.set('pageToken',page);
+        const j=await gFetch(`calendars/${encodeURIComponent(cal.id)}/events?`+q.toString());items.push(...(j.items||[]).map(e=>(e._agenda=cal.nome,e)));page=j.nextPageToken||''}while(page);
+      }catch(e){if(e.gauth)throw e;faltando.push(cal.nome)}}   // agenda pessoal ainda não compartilhada com a ADM: segue só com a outra
+    GLIVE={itens:items.filter(e=>e.status!=='cancelled'&&e.start).map(gItem),faltando,atualizado_em:new Date().toISOString()};await idb.set('g_live',GLIVE);return true;
   }catch(e){if(!e.gauth)toast(e.message);return false}
 }
-async function gCreate(ev){const j=await gFetch(`calendars/${encodeURIComponent(G_CAL)}/events`,{method:'POST',body:JSON.stringify(ev)});const it=gItem(j);GLIVE=GLIVE||{itens:[]};GLIVE.itens.push(it);await idb.set('g_live',GLIVE);return it}
+async function gCreate(ev,cal=G_CAL){const j=await gFetch(`calendars/${encodeURIComponent(cal)}/events`,{method:'POST',body:JSON.stringify(ev)});j._agenda=(G_CALS.find(c=>c.id===cal)||G_CALS[0]).nome;const it=gItem(j);GLIVE=GLIVE||{itens:[]};GLIVE.itens.push(it);await idb.set('g_live',GLIVE);return it}
 async function gMirrorAppt(nome,ini,fim){
   if(!await gToken())return 'off';
   try{await gCreate({summary:nome+' · Atendimento',colorId:'11',start:{dateTime:ini.toISOString(),timeZone:'America/Sao_Paulo'},end:{dateTime:fim.toISOString(),timeZone:'America/Sao_Paulo'}});return 'ok'}catch(e){return 'erro'}
@@ -642,7 +651,7 @@ async function openBooking(day){
   async function gForm(){
     const tabs=`<div class="seg" role="group" style="margin-bottom:10px"><button aria-pressed="false" id="gToP">Paciente</button><button aria-pressed="true">Evento Google</button></div>`;
     const back=()=>{const t=$('#gToP');if(t)t.onclick=async()=>{const tk=await idb.get('gds_token');if(tk)form(tk,await idb.get('gds_medicos')||[],await idb.get('gds_servicos')||[]);else connect()}};
-    const cid=await idb.get('g_client');
+    const cid=((await idb.get('g_client'))||G_CLIENT_PADRAO);
     if(!cid){show(tabs+`<h1 style="font-size:22px;margin:0">Conectar o Google Agenda</h1>
       <p class="sub">Cole o ID do cliente OAuth do tipo “Aplicativo da Web” (termina em .apps.googleusercontent.com). Uma vez só.</p>
       <label ${lab}>ID do cliente<input class="field" id="gCid" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
@@ -655,6 +664,7 @@ async function openBooking(day){
       $('#gGo').onclick=()=>gConnect();$('#gCidTroca').onclick=async()=>{await idb.set('g_client',null);gForm()};return}
     const st=new Date(day||TODAY);let h=9,m=0;if(isoDay(st)===isoDay(new Date())){const t=new Date();t.setMinutes(Math.ceil((t.getMinutes()+15)/15)*15,0,0);h=t.getHours();m=t.getMinutes()}
     show(tabs+`<h1 style="font-size:22px;margin:0">Novo evento</h1><p class="sub">Vai direto para o seu Google Agenda.</p>
+      <label ${lab}>Agenda<select class="field" id="gCal">${G_CALS.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}</select></label>
       <label ${lab}>Título<input class="field" id="gTit" autocomplete="off"></label>
       <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="gDia"> Dia inteiro</label>
       <div class="row" style="gap:8px"><label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Data<input class="field" id="gData" type="date" value="${isoDay(st)}"></label>
@@ -671,7 +681,7 @@ async function openBooking(day){
       if(dia.checked){ev.start={date:dt};ev.end={date:isoDay(addDays(new Date(dt+'T00:00:00'),1))}}
       else{const i=new Date(dt+'T'+$('#gHora').value+':00'),f=new Date(i.getTime()+(+$('#gDur').value)*60000);if(isNaN(i)){er.textContent='Hora inválida.';return}ev.start={dateTime:i.toISOString(),timeZone:'America/Sao_Paulo'};ev.end={dateTime:f.toISOString(),timeZone:'America/Sao_Paulo'}}
       b.disabled=true;b.textContent='Criando…';
-      try{await gCreate(ev);close();toast('Evento criado no Google Agenda');if(baseRaw)render(baseRaw)}
+      try{await gCreate(ev,$('#gCal').value);close();toast('Evento criado no Google Agenda');if(baseRaw)render(baseRaw)}
       catch(e){if(e.gauth){gForm();return}er.textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Criar no Google Agenda'}}};
   }
 
