@@ -478,6 +478,22 @@ function pickCpf(o){if(!o||typeof o!=='object')return'';for(const[k,v]of Object.
 const pad2=n=>String(n).padStart(2,'0');
 const apiDT=d=>`${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:00`;
 const isoDay=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+// CPF sem digitar: 1) guardado neste iPhone; 2) celular do cadastro; 3) celulares que já vieram na agenda do GestãoDS com o mesmo nome.
+// O que for achado ou digitado fica guardado só neste iPhone (IndexedDB), nunca volta para o retrato.
+const cpfKey=p=>(p&&p.id?'id:'+p.id:'')||'n:'+norm(p&&p.name);
+async function guardaCpf(p,cpf){if(!cpf||cpf.length!==11)return;const m=await idb.get('gds_cpfs')||{};m[cpfKey(p)]=cpf;m['n:'+norm(p.name)]=cpf;await idb.set('gds_cpfs',m)}
+async function cpfDoPaciente(p,tk){
+  const m=await idb.get('gds_cpfs')||{};const salvo=m[cpfKey(p)]||m['n:'+norm(p.name)];if(salvo)return{cpf:salvo,via:'guardado'};
+  const cels=new Set();const add=v=>{const d=String(v||'').replace(/\D/g,'');if(d.length>=8&&d.length<=15)cels.add(d)};
+  add(p.phone);for(const a of (D.raw.agenda?.gestaods?.itens||[]))if(norm(a.paciente)===norm(p.name))add(a.celular);
+  if(!cels.size)return{msg:'Sem celular no cadastro. Digite o CPF uma vez que eu guardo neste iPhone.'};
+  for(const cel of cels){
+    const vars=[cel];if(cel.length===11&&cel.startsWith('55')===false)vars.push('55'+cel);if(cel.length===13&&cel.startsWith('55'))vars.push(cel.slice(2));
+    for(const c of vars){let q;try{q=await gdsCall('paciente/',tk,{celular:c})}catch(e){return{msg:e.message}}
+      if(q.http===401)return{auth:true};const cpf=q.http===200?pickCpf(q.body):'';if(cpf){await guardaCpf(p,cpf);return{cpf,via:'pelo celular'}}}
+  }
+  return{msg:'O GestãoDS não achou esse celular. Digite o CPF uma vez que eu guardo neste iPhone.'};
+}
 async function openBooking(day){
   const sheet=$('#sheet'),bg=$('#sheetBg');
   const close=()=>{bg.classList.remove('on');sheet.classList.remove('on');setTimeout(()=>{bg.hidden=true;sheet.hidden=true},250)};
@@ -515,7 +531,7 @@ async function openBooking(day){
       <label ${lab}>Paciente<input class="field" id="bkNome" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Comece a digitar o nome"></label>
       <div id="bkSug" class="list" style="margin-top:6px" hidden></div>
       <label style="display:flex;gap:10px;align-items:center;margin-top:12px;font-size:15px"><input type="checkbox" id="bkNovo"> Paciente novo: cadastrar no GestãoDS</label>
-      <label ${lab}>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Em branco: eu busco pelo celular do cadastro"></label>
+      <label ${lab} id="bkCpfL" hidden>CPF<input class="field" id="bkCpf" inputmode="numeric" autocomplete="off" placeholder="Só os números"></label>
       <p class="sub" id="bkFone" style="margin:4px 0 0"></p>
       <div id="bkNovoF" hidden>
         <label ${lab}>Celular<input class="field" id="bkCel" type="tel" inputmode="tel" autocomplete="off" placeholder="(27) 99999-9999"></label>
@@ -539,7 +555,16 @@ async function openBooking(day){
     let pat=null;
     // Sugestões enquanto digita: todas as palavras digitadas precisam aparecer no nome; quem começa com o texto vem primeiro.
     const nomeIn=$('#bkNome'),sug=$('#bkSug');
-    const showFone=()=>{$('#bkFone').textContent=pat?(pat.phone?'Celular no cadastro: '+pat.phone:'Sem celular no cadastro: digite o CPF.'):''};
+    const cpfL=$('#bkCpfL'),cpfIn=$('#bkCpf'),fone=$('#bkFone');
+    let found=null; // CPF achado sem digitar
+    const needCpf=(show,msg)=>{cpfL.hidden=!show;if(msg!==undefined)fone.textContent=msg};
+    const showFone=()=>{found=null;if($('#bkNovo').checked){needCpf(true,'');return}if(!pat){needCpf(!!nomeIn.value.trim(),nomeIn.value.trim()?'Paciente fora da base: digite o CPF ou marque "Paciente novo".':'');return}needCpf(false,'Localizando o CPF no GestãoDS…');resolve(pat)};
+    async function resolve(p){
+      const r=await cpfDoPaciente(p,tk);if(pat!==p)return;
+      if(r.cpf){found=r.cpf;needCpf(false,'CPF localizado ✓'+(r.via?' ('+r.via+')':''))}
+      else if(r.auth){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.')}
+      else needCpf(true,r.msg||'Não achei o CPF pelo celular. Digite uma vez que eu guardo neste iPhone.');
+    }
     const pick=p=>{pat=p;nomeIn.value=p.name;sug.hidden=true;sug.innerHTML='';showFone();if($('#bkNovo').checked&&p.phone&&!$('#bkCel').value)$('#bkCel').value=p.phone};
     nomeIn.oninput=()=>{
       const q=norm(nomeIn.value),parts=q.split(' ').filter(Boolean);
@@ -554,7 +579,7 @@ async function openBooking(day){
     nomeIn.onblur=()=>setTimeout(()=>{sug.hidden=true},150);
     nomeIn.onfocus=()=>{if(nomeIn.value.trim().length>=2&&!pat)nomeIn.oninput()};
     $('#bkTroca').onclick=async()=>{await idb.set('gds_token',null);connect()};
-    const novo=$('#bkNovo');novo.onchange=()=>{$('#bkNovoF').hidden=!novo.checked;$('#bkSoCad').hidden=!novo.checked;$('#bkCpf').placeholder=novo.checked?'Obrigatório para cadastrar':'Em branco: eu busco pelo celular do cadastro';if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
+    const novo=$('#bkNovo');novo.onchange=()=>{$('#bkNovoF').hidden=!novo.checked;$('#bkSoCad').hidden=!novo.checked;showFone();if(novo.checked&&pat?.phone&&!$('#bkCel').value)$('#bkCel').value=pat.phone};
     // Cadastro no GestãoDS: POST paciente/cadastrar/ (nome_completo, cpf e email obrigatórios; doc openapi consultada em 25/11/2026)
     async function cadastrar(){
       const er=$('#bkErr'),nome=$('#bkNome').value.trim(),cpf=$('#bkCpf').value.replace(/\D/g,''),email=$('#bkEmail').value.trim(),cel=$('#bkCel').value.replace(/\D/g,''),nasc=$('#bkNasc').value,sexo=$('#bkSexo').value;
@@ -566,13 +591,13 @@ async function openBooking(day){
       const r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
       if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
       if(r.http<200||r.http>=300){er.textContent='O GestãoDS não cadastrou ('+r.http+'). '+gdsMsg(r.body)+' Se a pessoa já tiver cadastro, desmarque "Paciente novo" e agende pelo CPF.';return null}
-      novo.checked=false;novo.onchange();toast('Paciente cadastrado no GestãoDS');return cpf;
+      await guardaCpf(pat||{name:nome},cpf);found=cpf;novo.checked=false;$('#bkNovoF').hidden=true;$('#bkSoCad').hidden=true;needCpf(false,'Cadastrado ✓');toast('Paciente cadastrado no GestãoDS');return cpf;
     }
     $('#bkSoCad').onclick=async()=>{const b=$('#bkSoCad');$('#bkErr').textContent='';b.disabled=true;b.textContent='Cadastrando…';try{if(await cadastrar()){$('#bkErr').textContent='';$('#bkFone').textContent='Cadastrado. Agora é só conferir o horário e criar o agendamento.'}}catch(e){$('#bkErr').textContent=e.message}finally{if(b.isConnected){b.disabled=false;b.textContent='Só cadastrar'}}};
     $('#bkGo').onclick=async()=>{
       const b=$('#bkGo'),er=$('#bkErr');er.textContent='';
       const nome=$('#bkNome').value.trim(),med=$('#bkMed').value,kind=tipo.value,sid=$('#bkServ').value,dt=$('#bkData').value,hr=$('#bkHora').value;
-      let cpf=$('#bkCpf').value.replace(/\D/g,'');
+      let cpf=(!cpfL.hidden&&cpfIn.value.replace(/\D/g,''))||found||'';
       if(!nome){er.textContent='Informe o paciente.';return}
       if(!med){er.textContent='Nenhum médico carregado. Use “Trocar token” para reconectar.';return}
       if(!dt||!hr){er.textContent='Informe data e hora.';return}
@@ -583,15 +608,8 @@ async function openBooking(day){
       b.disabled=true;b.textContent='Conferindo…';
       try{
         if(novo.checked){b.textContent='Cadastrando paciente…';const c=await cadastrar();if(!c)return;cpf=c}
-        if(!cpf){
-          const cel=String(pat?.phone||'').replace(/\D/g,'');
-          if(cel.length<8){er.textContent='Sem CPF e sem celular no cadastro. Digite o CPF.';return}
-          const q=await gdsCall('paciente/',tk,{celular:cel});
-          if(q.http===401){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}
-          cpf=q.http===200?pickCpf(q.body):'';
-          if(!cpf){er.textContent='Não achei esse celular no GestãoDS. Digite o CPF.';$('#bkCpf').focus();return}
-          $('#bkCpf').value=cpf;
-        }
+        if(!cpf&&pat){const r=await cpfDoPaciente(pat,tk);if(r.auth){await idb.set('gds_token',null);return connect('O token expirou ou foi recusado. Cole um novo.')}cpf=r.cpf||''}
+        if(!cpf){needCpf(true,'Não achei o CPF. Digite uma vez que eu guardo neste iPhone.');er.textContent='Falta o CPF.';cpfIn.focus();return}
         const quando=ini.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})+' às '+hr;
         if(!confirm(`Criar ${GDS_TIPOS.find(t=>t[0]===kind)[1].toLowerCase()} de ${nome}\n${quando} (${$('#bkDur').selectedOptions[0].textContent})\ndireto no GestãoDS?`))return;
         b.textContent='Criando no GestãoDS…';
@@ -602,6 +620,7 @@ async function openBooking(day){
         if(r.http<200||r.http>=300){er.textContent='O GestãoDS não criou ('+r.http+'). '+gdsMsg(r.body)+' O preenchimento foi mantido.';return}
         const servNome=sid&&GDS_SERV.has(kind)?gdsLabel(servicos.find(s=>String(s.id)===String(sid))||{id:sid}):'';
         D.agenda.push({src:'gds',ini,fim,title:nome,service:servNome,status:'agendado',off:false,p:pat||D.match(nome)});D.agenda.sort((a,c)=>a.ini-c.ini);
+        await guardaCpf(pat||{name:nome},cpf);
         close();toast('Agendamento criado no GestãoDS');if(curTab==='agenda')vAgenda();
       }catch(e){er.textContent=e.message+(e.blocked?' Use “Abrir o GestãoDS” para marcar por lá.':'')}
       finally{if(b.isConnected){b.disabled=false;b.textContent='Criar no GestãoDS'}}
