@@ -730,11 +730,11 @@ async function openBooking(day){
       <div id="bkNovoF" hidden>
         <label ${lab}>Cadastro rápido: cole ou dite os dados, em qualquer ordem<textarea class="field" id="bkLivre" rows="7" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Nome completo&#10;22/08/1990&#10;email@exemplo.com&#10;000.000.000-00&#10;RG 1234567&#10;(27) 99999-9999&#10;Feminino"></textarea></label>
         <p class="sub" id="bkLivreR" style="margin:4px 0 0"></p>
-        <label ${lab}>Celular (exigido)<input class="field" id="bkCel" type="tel" inputmode="tel" autocomplete="off" placeholder="(27) 99999-9999"></label>
+        <label ${lab}>Celular<input class="field" id="bkCel" type="tel" inputmode="tel" autocomplete="off" placeholder="(27) 99999-9999"></label>
         <label ${lab}>E-mail (o GestãoDS exige)<input class="field" id="bkEmail" type="email" inputmode="email" autocapitalize="off" autocomplete="off"></label>
-        <label ${lab}>RG (o GestãoDS exige)<input class="field" id="bkRg" autocomplete="off" autocapitalize="characters"></label>
+        <label ${lab}>RG (se tiver)<input class="field" id="bkRg" autocomplete="off" autocapitalize="characters"></label>
         <div class="row" style="gap:8px"><label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Nascimento<input class="field" id="bkNasc" type="date"></label>
-        <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Gênero (exigido)<select class="field" id="bkSexo"><option value="">—</option><option value="F">F</option><option value="M">M</option></select></label></div>
+        <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Gênero<select class="field" id="bkSexo"><option value="">—</option><option value="F">F</option><option value="M">M</option></select></label></div>
       </div>
       <label ${lab}>Médico<select class="field" id="bkMed">${medicos.map(m=>`<option value="${esc(m.id)}">${esc(gdsLabel(m))}</option>`).join('')||'<option value="">Nenhum médico carregado</option>'}</select></label>
       <label ${lab}>Tipo<select class="field" id="bkTipo">${GDS_TIPOS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
@@ -786,7 +786,7 @@ async function openBooking(day){
       if(r.cpf)cpfIn.value=r.cpf;if(r.email)$('#bkEmail').value=r.email;if(r.cel)$('#bkCel').value=r.cel;if(r.nasc)$('#bkNasc').value=r.nasc;if(r.sexo)$('#bkSexo').value=r.sexo;if(r.rg)$('#bkRg').value=r.rg;
       const ok=[],falta=[];
       r.nome?ok.push('nome'):falta.push('nome');r.nasc?ok.push('nascimento'):0;r.email?ok.push('e-mail'):falta.push('e-mail');
-      r.cpf?ok.push(r.cpfValido?'CPF ✓':'CPF (dígito não confere, confira)'):falta.push('CPF');r.rg?ok.push('RG'):falta.push('RG');r.cel?ok.push('celular'):falta.push('celular');r.sexo?ok.push('gênero'):falta.push('gênero');
+      r.cpf?ok.push(r.cpfValido?'CPF ✓':'CPF (dígito não confere, confira)'):falta.push('CPF');r.rg?ok.push('RG'):0;r.cel?ok.push('celular'):0;r.sexo?ok.push('gênero'):0;
       livreR.textContent=txt.trim()?('Reconheci: '+(ok.join(' · ')||'nada ainda')+(falta.length?'. Falta: '+falta.join(', ')+'.':'. Pronto para cadastrar.')):'';
     }
     livre.oninput=()=>{clearTimeout(livreT);livreT=setTimeout(()=>aplicarLivre(livre.value),200)};
@@ -798,8 +798,8 @@ async function openBooking(day){
       if(nome.length<3){er.textContent='Informe o nome completo.';return null}
       if(cpf.length!==11){er.textContent='Para cadastrar, o CPF precisa ter 11 dígitos.';return null}
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){er.textContent='O GestãoDS exige e-mail para cadastrar.';return null}
-      const rg=$('#bkRg').value.trim();const faltam=[];if(!cel)faltam.push('celular');if(!rg)faltam.push('RG');if(!sexo)faltam.push('gênero');if(faltam.length){er.textContent='O GestãoDS exige também: '+faltam.join(', ')+'.';return null}if(rg.replace(/[^0-9a-z]/gi,'').length<7){er.textContent='RG precisa ter pelo menos 7 caracteres.';return null}if(cel&&(cel.length<8||cel.length>15)){er.textContent='Celular inválido.';return null}
-      const body={nome_completo:nome,cpf,email,rg:$('#bkRg').value.trim()};if(cel)body.celular=cel;document.querySelectorAll('#bkNovoF [data-extra]').forEach(i=>{const v=i.value.trim();if(v)body[i.dataset.extra]=i.dataset.extra==='cep'?v.replace(/\D/g,''):v});if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
+      const rg=$('#bkRg').value.trim();if(rg&&rg.replace(/[^0-9a-z]/gi,'').length<7){er.textContent='RG precisa ter pelo menos 7 caracteres.';return null}if(cel&&(cel.length<8||cel.length>15)){er.textContent='Celular inválido.';return null}
+      const body={nome_completo:nome,cpf,email};if($('#bkRg').value.trim())body.rg=$('#bkRg').value.trim();if(cel)body.celular=cel;document.querySelectorAll('#bkNovoF [data-extra]').forEach(i=>{const v=i.value.trim();if(v)body[i.dataset.extra]=i.dataset.extra==='cep'?v.replace(/\D/g,''):v});if(sexo)body.sexo=sexo;if(nasc){const[y,m,d]=nasc.split('-');body.nascimento=`${d}/${m}/${y}`}
       let r=await gdsCall('paciente/cadastrar/',tk,body,'POST');
       if(r.http===401){await idb.set('gds_token',null);connect('O token expirou ou foi recusado. Cole um novo.');return null}
       // Se a agenda exigir campo extra que já temos (telefone = celular) ou outro formato de celular, tenta de novo uma vez sozinho.
