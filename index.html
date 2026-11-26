@@ -365,6 +365,19 @@ function patCard(p,extra){
 function bindCards(root){root.querySelectorAll('[data-ag]').forEach(b=>b.addEventListener('click',()=>openAppt(b.dataset.ag)));root.querySelectorAll('[data-pac]:not([data-ag])').forEach(b=>b.addEventListener('click',()=>openPatient(b.dataset.pac)))}
 function waLink(phone){const d=String(phone||'').replace(/\D/g,'');if(d.length<10)return null;return 'https://wa.me/'+(d.length<=11?'55'+d:d)}
 
+/* Horários livres do GestãoDS (GET agendamento/busca-horarios-disponiveis, data dd/mm/YYYY + medico_id; doc lida em 25/11/2026) */
+async function gdsLivres(dtISO,medId,box,horaIn,tk){
+  if(!box)return;if(!dtISO||!medId||!tk){box.textContent='';return}
+  const [y,m,d]=dtISO.split('-');box.textContent='Buscando horários livres…';box.dataset.dt=dtISO;
+  try{const r=await gdsCall(`agendamento/busca-horarios-disponiveis/?data=${d}/${m}/${y}&medico_id=${encodeURIComponent(medId)}`,tk);
+    if(box.dataset.dt!==dtISO)return;
+    if(r.http!==200){box.textContent='Não consegui ver os horários livres agora ('+r.http+').';return}
+    const dias=Array.isArray(r.body&&r.body.data)?r.body.data:[];const dia=dias.find(x=>x&&x.dia===dtISO);const hs=(dia&&Array.isArray(dia.horarios)?dia.horarios:[]).map(h=>String(h).slice(0,5));
+    if(!hs.length){box.innerHTML='<b>Sem horário livre nesse dia</b> na agenda do GestãoDS. Escolha outra data.';return}
+    box.innerHTML='<span style="display:block;margin-bottom:4px">Livres no GestãoDS (toque para usar):</span><span style="display:flex;flex-wrap:wrap;gap:6px">'+hs.map(h=>`<button type="button" class="chip" data-h="${h}" aria-pressed="${horaIn&&horaIn.value===h}">${h}</button>`).join('')+'</span>';
+    box.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>{if(horaIn)horaIn.value=b.dataset.h;box.querySelectorAll('[data-h]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)))});
+  }catch(e){if(box.dataset.dt===dtISO)box.textContent=''}
+}
 /* Agendamento do GestãoDS: abrir, reagendar, cancelar, confirmar (PUT agendamento/reagendar e mudar-status; doc openapi lida em 25/11/2026) */
 async function gMirrorMove(nome,velho,ini,fim){
   if(!await gToken())return 'off';
@@ -390,6 +403,7 @@ async function openAppt(hash){
     <h2 style="margin-top:18px">Reagendar</h2>
     <div class="row" style="gap:8px"><label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Data<input class="field" id="agData" type="date" value="${isoDay(e.ini)}"></label>
     <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Hora<input class="field" id="agHora" type="time" step="300" value="${pad2(e.ini.getHours())}:${pad2(e.ini.getMinutes())}"></label></div>
+    <div class="sub" id="agLivres" style="margin-top:6px"></div>
     <label ${lab}>Duração<select class="field" id="agDur">${durOpts}</select></label>
     <div class="btns"><button class="btn" id="agMove">Reagendar</button></div>
     <h2 style="margin-top:18px">Cancelar</h2>
@@ -399,6 +413,7 @@ async function openAppt(hash){
     <p class="sub">O Órbita não manda mensagem ao paciente; avise você.</p>
     <div class="btns"><button class="btn ghost" data-fechar>Fechar</button></div>`;
   bg.hidden=false;sheet.hidden=false;requestAnimationFrame(()=>{bg.classList.add('on');sheet.classList.add('on')});sheet.scrollTop=0;bg.onclick=close;sheet.querySelectorAll('[data-fechar]').forEach(b=>b.onclick=close);
+  if($('#agData')){const tkL=await idb.get('gds_token'),medL=((await idb.get('gds_medicos'))||[])[0];const lv=()=>gdsLivres($('#agData').value,medL&&medL.id,$('#agLivres'),$('#agHora'),tkL);$('#agData').addEventListener('change',lv);lv()}
   const er=$('#agErr');if($('#agPac'))$('#agPac').onclick=()=>openPatient(e.p.id);
   const depois=async(msg)=>{D.agenda.sort((a,c)=>a.ini-c.ini);if(LIVE){LIVE.itens=(LIVE.itens||[]).map(i=>i.hash===hash?{...i,inicio:apiDT(e.ini),fim:e.fim?apiDT(e.fim):i.fim,cancelado:e.off,confirmado:e.status==='confirmado'}:i);await idb.set('gds_live',LIVE)}close();toast(msg);if(curTab==='agenda')vAgenda();else if(typeof render==='function'&&baseRaw)render(baseRaw)};
   async function chamar(path,body,btn,txt){
@@ -798,6 +813,7 @@ async function openBooking(day){
       <label ${lab} id="bkServL" hidden>Serviço<select class="field" id="bkServ"><option value="">Escolha o serviço</option>${servicos.map(s=>`<option value="${esc(s.id)}">${esc(gdsLabel(s))}${s.categoria?' · '+esc(s.categoria):''}</option>`).join('')}</select></label>
       <div class="row" style="gap:8px"><label ${lab} style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Data<input class="field" id="bkData" type="date" value="${isoDay(start)}"></label>
       <label style="flex:1;display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);margin-top:12px">Hora<input class="field" id="bkHora" type="time" step="300" value="${pad2(hh)}:${pad2(mm)}"></label></div>
+      <div class="sub" id="bkLivres" style="margin-top:6px"></div>
       <label ${lab}>Duração<select class="field" id="bkDur">${[15,30,45,60,90,120,180].map(m=>`<option value="${m}"${m===60?' selected':''}>${m<60?m+' min':m/60+' h'+(m%60?' '+m%60+' min':'')}</option>`).join('')}</select></label>
       <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:15px"><input type="checkbox" id="bkPrim"> Primeiro atendimento</label>
       <label ${lab}>Observação<textarea class="field" id="bkObs" rows="2" maxlength="1000"></textarea></label>
@@ -805,6 +821,7 @@ async function openBooking(day){
       <div class="btns"><button class="btn" id="bkGo">Agendar</button><button class="btn ghost" id="bkSoCad" hidden>Só cadastrar</button><button class="btn ghost" data-fechar>Fechar</button></div>
       <div class="btns" style="margin-top:4px">${webBtn}<button class="btn ghost" id="bkTroca">Trocar token</button></div>`);
     $('#bkToG').onclick=()=>gForm();
+    const livresBk=()=>gdsLivres($('#bkData').value,$('#bkMed').value,$('#bkLivres'),$('#bkHora'),tk);$('#bkData').addEventListener('change',livresBk);$('#bkMed').addEventListener('change',livresBk);livresBk();
     const tipo=$('#bkTipo'),servL=$('#bkServL');
     const syncTipo=()=>{servL.hidden=!GDS_SERV.has(tipo.value);if(servL.hidden)$('#bkServ').value=''};tipo.onchange=syncTipo;syncTipo();
     let pat=null;
